@@ -12,7 +12,6 @@ export async function init() {
         }, { once: true });
     }
 }
-}
 
 function createStoryDirectorPanel() {
     // Verhindert doppelte Panels beim erneuten Laden
@@ -72,6 +71,8 @@ function createStoryDirectorPanel() {
             handleDirectorAction(button.dataset.action);
         });
     });
+
+    console.log('[Story Director] UI created!');
 }
 
 function handleDirectorAction(action) {
