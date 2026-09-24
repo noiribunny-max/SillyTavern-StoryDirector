@@ -664,6 +664,48 @@ if (savedSettings) {
     if (avoidRecentIdeas) {
         avoidRecentIdeas.checked =
             savedSettings.avoidRecentIdeas ?? true;
+
+        const customTokens =
+            panel.querySelector('#story-director-custom-tokens');
+
+        if (customTokens) {
+            customTokens.checked =
+                savedSettings.customTokens ?? true;
+        }
+
+        const tokenSettings = savedSettings.tokens ?? {};
+
+        const eventTokens =
+            panel.querySelector('#story-director-tokens-event');
+
+        const twistTokens =
+            panel.querySelector('#story-director-tokens-twist');
+
+        const timeskipTokens =
+            panel.querySelector('#story-director-tokens-timeskip');
+
+        const unstuckTokens =
+            panel.querySelector('#story-director-tokens-unstuck');
+
+        if (eventTokens) {
+            eventTokens.value =
+                String(tokenSettings.event ?? 800);
+        }
+
+        if (twistTokens) {
+            twistTokens.value =
+                String(tokenSettings.twist ?? 1400);
+        }
+
+        if (timeskipTokens) {
+            timeskipTokens.value =
+                String(tokenSettings.timeskip ?? 1200);
+        }
+
+        if (unstuckTokens) {
+            unstuckTokens.value =
+                String(tokenSettings.unstuck ?? 1600);
+        }
     }
 } else {
     renderSlots();
@@ -682,6 +724,23 @@ function saveSuggestionSettings(slotCountSelect, slotsContainer) {
 
         avoidRecentIdeas:
             document.getElementById('story-director-avoid-recent')?.checked ?? true,
+            
+        customTokens:
+            document.getElementById('story-director-custom-tokens')?.checked ?? true,
+
+        tokens: {
+            event:
+                Number(document.getElementById('story-director-tokens-event')?.value) || 800,
+
+            twist:
+                Number(document.getElementById('story-director-tokens-twist')?.value) || 1400,
+
+            timeskip:
+                Number(document.getElementById('story-director-tokens-timeskip')?.value) || 1200,
+
+            unstuck:
+                Number(document.getElementById('story-director-tokens-unstuck')?.value) || 1600,
+        },    
     };
 
     slotsContainer.querySelectorAll('.story-director-select').forEach(select => {

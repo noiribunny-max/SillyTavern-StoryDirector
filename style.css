@@ -187,7 +187,8 @@
 
     width: 52px;
     height: 52px;
-
+    max-height: calc(100vh - 90px);
+    overflow-y: auto;
     z-index: 10000;
 
     display: flex;
@@ -210,7 +211,7 @@
     cursor: grab;
 
     user-select: none;
-    touch-action: none;
+    touch-action: pan-y;
 
     transition:
         transform 0.15s ease,
