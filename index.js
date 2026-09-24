@@ -636,6 +636,24 @@ function setupSuggestionSettings(panel) {
         }
     });
 
+    const tokenSelectIds = [
+        'story-director-custom-tokens',
+        'story-director-tokens-event',
+        'story-director-tokens-twist',
+        'story-director-tokens-timeskip',
+        'story-director-tokens-unstuck',
+    ];
+
+    tokenSelectIds.forEach(id => {
+        const element = panel.querySelector(`#${id}`);
+
+        if (element) {
+            element.addEventListener('change', () => {
+                saveSuggestionSettings(slotCountSelect, slotsContainer);
+            });
+        }
+    });
+    
 const savedSettings = loadSuggestionSettings();
 
 if (savedSettings) {
