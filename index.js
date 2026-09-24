@@ -16,14 +16,17 @@ async function generateDirectorResponse(prompt, maxTokens) {
 
     try {
         const result = await connectionService.sendRequest(
-            profileId,
-            prompt,
-            maxTokens,
-            {
-                stream: false,
-                extractData: true,
-            }
-        );
+    profileId,
+    prompt,
+    maxTokens,
+    {
+        stream: false,
+        extractData: true,
+    },
+    {
+        reasoning_effort: 'low',
+    }
+);
 
 console.log(
     '[Story Director] RAW API RESULT:',
