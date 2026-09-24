@@ -513,7 +513,7 @@ function setupSuggestionSettings(panel) {
         slotsContainer.appendChild(slot);
     }
 }
-    }
+    
 
     slotCountSelect.addEventListener('change', () => {
         renderSlots();
@@ -531,4 +531,5 @@ if (savedSettings) {
     renderSlots(savedSettings.slots);
 } else {
     renderSlots();
+}
 }
