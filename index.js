@@ -30,6 +30,13 @@ console.log(
     result
 );
 
+console.log(
+    '[Story Director] CONTENT CHECK:',
+    typeof result?.content,
+    Boolean(result?.content),
+    result?.content
+);
+
         if (typeof result === 'string') {
             return result;
         }
