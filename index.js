@@ -355,30 +355,35 @@ function handleDirectorAction(action) {
 }
 
 function openSettings() {
+    const section = document.querySelector('.story-director-section');
     const result = document.getElementById('story-director-result');
     const settings = document.getElementById('story-director-settings');
 
-    if (!result || !settings) {
+    if (!section || !result || !settings) {
         return;
     }
 
+    section.style.display = 'none';
     result.style.display = 'none';
     settings.style.display = 'block';
 
     console.log('[Story Director] Settings opened');
 }
 
+
 function setupSettingsBackButton(panel) {
     const backButton = panel.querySelector('.story-director-back');
+    const section = panel.querySelector('.story-director-section');
     const result = panel.querySelector('#story-director-result');
     const settings = panel.querySelector('#story-director-settings');
 
-    if (!backButton || !result || !settings) {
+    if (!backButton || !section || !result || !settings) {
         return;
     }
 
     backButton.addEventListener('click', () => {
         settings.style.display = 'none';
+        section.style.display = 'block';
         result.style.display = 'block';
 
         console.log('[Story Director] Settings closed');
