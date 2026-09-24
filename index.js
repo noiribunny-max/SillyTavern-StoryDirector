@@ -72,6 +72,10 @@ function createStoryDirectorPanel() {
             <button class="story-director-button" data-action="unstuck">
                 🆘 Story festgefahren?
             </button>
+                        
+            <button class="story-director-button" data-action="settings">
+                ⚙️ Einstellungen
+            </button>
         </div>
 
         <div class="story-director-result" id="story-director-result">
@@ -79,6 +83,30 @@ function createStoryDirectorPanel() {
                 Noch kein Vorschlag vorhanden.
                 <br>
                 <span>Die weise Eule wartet auf ihren Einsatz. 🦉</span>
+            </div>
+        </div>
+                <div class="story-director-settings" id="story-director-settings">
+            <div class="story-director-settings-header">
+                <strong>⚙️ Vorschlags-Einstellungen</strong>
+
+                <button
+                    class="story-director-back"
+                    type="button"
+                    title="Zurück"
+                >
+                    ←
+                </button>
+            </div>
+
+            <div class="story-director-settings-placeholder">
+                <p>
+                    Hier können wir später festlegen,
+                    welche Aufgabe jeder Slot übernimmt. 🦉
+                </p>
+
+                <small>
+                    Slot-Konfiguration kommt als Nächstes.
+                </small>
             </div>
         </div>
     `;
@@ -91,6 +119,8 @@ function createStoryDirectorPanel() {
     setupToggle(toggle, panel);
     setupCloseButton(toggle, panel);
     setupDragging(toggle, panel);
+    setupSettingsBackButton(panel);
+
 
     panel.querySelectorAll('.story-director-button').forEach(button => {
         button.addEventListener('click', () => {
@@ -286,7 +316,12 @@ function restoreHudPosition(toggle, panel) {
 }
 
 function handleDirectorAction(action) {
+        if (action === 'settings') {
+        openSettings();
+        return;
+    }
     const result = document.getElementById('story-director-result');
+    
 
     if (!result) {
         return;
@@ -317,4 +352,35 @@ function handleDirectorAction(action) {
     `;
 
     console.log(`[Story Director] Action: ${action}`);
+}
+
+function openSettings() {
+    const result = document.getElementById('story-director-result');
+    const settings = document.getElementById('story-director-settings');
+
+    if (!result || !settings) {
+        return;
+    }
+
+    result.style.display = 'none';
+    settings.style.display = 'block';
+
+    console.log('[Story Director] Settings opened');
+}
+
+function setupSettingsBackButton(panel) {
+    const backButton = panel.querySelector('.story-director-back');
+    const result = panel.querySelector('#story-director-result');
+    const settings = panel.querySelector('#story-director-settings');
+
+    if (!backButton || !result || !settings) {
+        return;
+    }
+
+    backButton.addEventListener('click', () => {
+        settings.style.display = 'none';
+        result.style.display = 'block';
+
+        console.log('[Story Director] Settings closed');
+    });
 }
