@@ -330,3 +330,45 @@
 .story-director-back:hover {
     background: rgba(255, 255, 255, 0.1);
 }
+
+.story-director-settings-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.story-director-setting-label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.story-director-select {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    border-radius: 8px;
+    background: var(--SmartThemeBlurTintColor, rgba(30, 30, 30, 0.95));
+    color: var(--SmartThemeBodyColor, #eee);
+    font-size: 14px;
+}
+
+.story-director-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.story-director-slot {
+    padding: 10px;
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.story-director-slot .story-director-setting-label {
+    margin-bottom: 6px;
+}

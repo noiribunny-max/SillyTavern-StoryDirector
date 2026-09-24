@@ -98,17 +98,31 @@ function createStoryDirectorPanel() {
                 </button>
             </div>
 
-            <div class="story-director-settings-placeholder">
-                <p>
-                    Hier können wir später festlegen,
-                    welche Aufgabe jeder Slot übernimmt. 🦉
-                </p>
+         <div class="story-director-settings-content">
 
-                <small>
-                    Slot-Konfiguration kommt als Nächstes.
-                </small>
-            </div>
-        </div>
+    <label
+        class="story-director-setting-label"
+        for="story-director-slot-count"
+    >
+        Anzahl der Vorschläge
+    </label>
+
+    <select
+        id="story-director-slot-count"
+        class="story-director-select"
+    >
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3" selected>3</option>
+        <option value="4">4</option>
+    </select>
+
+    <div
+        id="story-director-slots"
+        class="story-director-slots"
+    ></div>
+
+</div>
     `;
 
     document.body.appendChild(toggle);
@@ -120,6 +134,7 @@ function createStoryDirectorPanel() {
     setupCloseButton(toggle, panel);
     setupDragging(toggle, panel);
     setupSettingsBackButton(panel);
+    setupSuggestionSettings(panel);
 
 
     panel.querySelectorAll('.story-director-button').forEach(button => {
@@ -388,4 +403,68 @@ function setupSettingsBackButton(panel) {
 
         console.log('[Story Director] Settings closed');
     });
+}
+
+function setupSuggestionSettings(panel) {
+    const slotCountSelect = panel.querySelector('#story-director-slot-count');
+    const slotsContainer = panel.querySelector('#story-director-slots');
+
+    if (!slotCountSelect || !slotsContainer) {
+        return;
+    }
+
+    const tasks = [
+        { value: 'random', label: '🎲 Zufällig' },
+        { value: 'positive', label: '✨ Positiver Verlauf' },
+        { value: 'negative', label: '⚠️ Negativer Verlauf' },
+        { value: 'gore', label: '🩸 Gore / Gewalt' },
+        { value: 'danger', label: '💥 Gefahr' },
+        { value: 'twist', label: '🌀 Twist' },
+        { value: 'romance', label: '❤️ Romantik' },
+        { value: 'relationship', label: '🤝 Beziehung' },
+        { value: 'character', label: '🧠 Charakterentwicklung' },
+        { value: 'mystery', label: '🕵️ Mystery' },
+        { value: 'horror', label: '👻 Horror' },
+        { value: 'conflict', label: '⚔️ Konflikt' },
+        { value: 'humor', label: '😂 Humor' },
+        { value: 'worldbuilding', label: '🌍 Worldbuilding' },
+        { value: 'consequence', label: '🔗 Konsequenz' },
+        { value: 'story-thread', label: '🎯 Storyfaden' }
+    ];
+
+    function renderSlots() {
+        const count = Number(slotCountSelect.value);
+
+        slotsContainer.innerHTML = '';
+
+        for (let i = 1; i <= count; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'story-director-slot';
+
+            const label = document.createElement('label');
+            label.className = 'story-director-setting-label';
+            label.textContent = `Slot ${i}`;
+
+            const select = document.createElement('select');
+            select.className = 'story-director-select';
+            select.dataset.slot = String(i);
+
+            tasks.forEach(task => {
+                const option = document.createElement('option');
+
+                option.value = task.value;
+                option.textContent = task.label;
+
+                select.appendChild(option);
+            });
+
+            slot.appendChild(label);
+            slot.appendChild(select);
+            slotsContainer.appendChild(slot);
+        }
+    }
+
+    slotCountSelect.addEventListener('change', renderSlots);
+
+    renderSlots();
 }
