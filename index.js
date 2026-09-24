@@ -84,6 +84,31 @@ window.testStoryDirectorConnection = async () => {
     }
 };
 
+function getStoryDirectorChatContext(limit = 30) {
+    const context = SillyTavern.getContext();
+
+    const chat = context.chat ?? [];
+
+    const messages = chat
+        .filter(message =>
+            message &&
+            !message.is_system &&
+            typeof message.mes === 'string' &&
+            message.mes.trim()
+        )
+        .slice(-limit);
+
+    return messages.map(message => ({
+        name: message.name || 'Unbekannt',
+        isUser: Boolean(message.is_user),
+        text: message.mes.trim(),
+    }));
+}
+
+window.testStoryDirectorChatContext = () => {
+    return getStoryDirectorChatContext(30);
+};
+
 export async function init() {
     console.log('[Story Director] Extension loaded!');
     console.log('[Story Director] Starting UI...');
