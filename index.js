@@ -136,47 +136,7 @@ function createStoryDirectorPanel() {
     setupSettingsBackButton(panel);
     setupSuggestionSettings(panel);
 
-    function saveSuggestionSettings(slotCountSelect, slotsContainer) {
-    const settings = {
-        slotCount: Number(slotCountSelect.value),
-        slots: [],
-    };
-
-    slotsContainer.querySelectorAll('.story-director-select').forEach(select => {
-        settings.slots.push({
-            slot: Number(select.dataset.slot),
-            task: select.value,
-        });
-    });
-
-    localStorage.setItem(
-        'story-director-suggestion-settings',
-        JSON.stringify(settings)
-    );
-
-    console.log('[Story Director] Suggestion settings saved:', settings);
-}
-
-function loadSuggestionSettings() {
-    const saved = localStorage.getItem(
-        'story-director-suggestion-settings'
-    );
-
-    if (!saved) {
-        return null;
-    }
-
-    try {
-        return JSON.parse(saved);
-    } catch (error) {
-        console.warn(
-            '[Story Director] Could not load suggestion settings:',
-            error
-        );
-
-        return null;
-    }
-}
+    
 
 
     panel.querySelectorAll('.story-director-button').forEach(button => {
@@ -532,4 +492,45 @@ if (savedSettings) {
 } else {
     renderSlots();
 }
+}
+function saveSuggestionSettings(slotCountSelect, slotsContainer) {
+    const settings = {
+        slotCount: Number(slotCountSelect.value),
+        slots: [],
+    };
+
+    slotsContainer.querySelectorAll('.story-director-select').forEach(select => {
+        settings.slots.push({
+            slot: Number(select.dataset.slot),
+            task: select.value,
+        });
+    });
+
+    localStorage.setItem(
+        'story-director-suggestion-settings',
+        JSON.stringify(settings)
+    );
+
+    console.log('[Story Director] Suggestion settings saved:', settings);
+}
+
+function loadSuggestionSettings() {
+    const saved = localStorage.getItem(
+        'story-director-suggestion-settings'
+    );
+
+    if (!saved) {
+        return null;
+    }
+
+    try {
+        return JSON.parse(saved);
+    } catch (error) {
+        console.warn(
+            '[Story Director] Could not load suggestion settings:',
+            error
+        );
+
+        return null;
+    }
 }
