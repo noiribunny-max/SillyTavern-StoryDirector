@@ -476,9 +476,16 @@ function setupSuggestionSettings(panel) {
     
 
     slotCountSelect.addEventListener('change', () => {
-        renderSlots();
-        saveSuggestionSettings(slotCountSelect, slotsContainer);
-    });
+    const currentSlots = Array.from(
+        slotsContainer.querySelectorAll('.story-director-select')
+    ).map(select => ({
+        slot: Number(select.dataset.slot),
+        task: select.value,
+    }));
+
+    renderSlots(currentSlots);
+    saveSuggestionSettings(slotCountSelect, slotsContainer);
+});
 
     slotsContainer.addEventListener('change', () => {
         saveSuggestionSettings(slotCountSelect, slotsContainer);
