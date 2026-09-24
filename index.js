@@ -138,12 +138,13 @@ window.testStoryDirectorWorldInfoContext = async () => {
     return await getStoryDirectorWorldInfoContext(100);
 };
 
-function getStoryDirectorContext({
+async function getStoryDirectorContext({
     chatLimit = 100,
 } = {}) {
     const chat = getStoryDirectorChatContext(chatLimit);
 
-    const worldInfo = getStoryDirectorWorldInfoContext(chatLimit);
+     const worldInfo =
+    await getStoryDirectorWorldInfoContext(chatLimit);
 
     const loreEntries = [
         worldInfo.worldInfoString,
@@ -171,7 +172,7 @@ function getStoryDirectorContext({
 }
 
 window.testStoryDirectorContext = async () => {
-    return getStoryDirectorContext({
+    return await getStoryDirectorContext({
         chatLimit: 100,
     });
 };
