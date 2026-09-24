@@ -136,6 +136,48 @@ function createStoryDirectorPanel() {
     setupSettingsBackButton(panel);
     setupSuggestionSettings(panel);
 
+    function saveSuggestionSettings(slotCountSelect, slotsContainer) {
+    const settings = {
+        slotCount: Number(slotCountSelect.value),
+        slots: [],
+    };
+
+    slotsContainer.querySelectorAll('.story-director-select').forEach(select => {
+        settings.slots.push({
+            slot: Number(select.dataset.slot),
+            task: select.value,
+        });
+    });
+
+    localStorage.setItem(
+        'story-director-suggestion-settings',
+        JSON.stringify(settings)
+    );
+
+    console.log('[Story Director] Suggestion settings saved:', settings);
+}
+
+function loadSuggestionSettings() {
+    const saved = localStorage.getItem(
+        'story-director-suggestion-settings'
+    );
+
+    if (!saved) {
+        return null;
+    }
+
+    try {
+        return JSON.parse(saved);
+    } catch (error) {
+        console.warn(
+            '[Story Director] Could not load suggestion settings:',
+            error
+        );
+
+        return null;
+    }
+}
+
 
     panel.querySelectorAll('.story-director-button').forEach(button => {
         button.addEventListener('click', () => {
@@ -432,39 +474,61 @@ function setupSuggestionSettings(panel) {
         { value: 'story-thread', label: '🎯 Storyfaden' }
     ];
 
-    function renderSlots() {
-        const count = Number(slotCountSelect.value);
+    function renderSlots(savedSlots = null) {
+    const count = Number(slotCountSelect.value);
 
-        slotsContainer.innerHTML = '';
+    slotsContainer.innerHTML = '';
 
-        for (let i = 1; i <= count; i++) {
-            const slot = document.createElement('div');
-            slot.className = 'story-director-slot';
+    for (let i = 1; i <= count; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'story-director-slot';
 
-            const label = document.createElement('label');
-            label.className = 'story-director-setting-label';
-            label.textContent = `Slot ${i}`;
+        const label = document.createElement('label');
+        label.className = 'story-director-setting-label';
+        label.textContent = `Slot ${i}`;
 
-            const select = document.createElement('select');
-            select.className = 'story-director-select';
-            select.dataset.slot = String(i);
+        const select = document.createElement('select');
+        select.className = 'story-director-select';
+        select.dataset.slot = String(i);
 
-            tasks.forEach(task => {
-                const option = document.createElement('option');
+        tasks.forEach(task => {
+            const option = document.createElement('option');
 
-                option.value = task.value;
-                option.textContent = task.label;
+            option.value = task.value;
+            option.textContent = task.label;
 
-                select.appendChild(option);
-            });
+            select.appendChild(option);
+        });
 
-            slot.appendChild(label);
-            slot.appendChild(select);
-            slotsContainer.appendChild(slot);
+        const savedSlot = savedSlots?.find(
+            saved => saved.slot === i
+        );
+
+        if (savedSlot) {
+            select.value = savedSlot.task;
         }
+
+        slot.appendChild(label);
+        slot.appendChild(select);
+        slotsContainer.appendChild(slot);
+    }
+}
     }
 
-    slotCountSelect.addEventListener('change', renderSlots);
+    slotCountSelect.addEventListener('change', () => {
+        renderSlots();
+        saveSuggestionSettings(slotCountSelect, slotsContainer);
+    });
 
+    slotsContainer.addEventListener('change', () => {
+        saveSuggestionSettings(slotCountSelect, slotsContainer);
+    });
+
+const savedSettings = loadSuggestionSettings();
+
+if (savedSettings) {
+    slotCountSelect.value = String(savedSettings.slotCount);
+    renderSlots(savedSettings.slots);
+} else {
     renderSlots();
 }
