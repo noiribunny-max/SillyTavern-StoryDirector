@@ -121,6 +121,36 @@ function createStoryDirectorPanel() {
         id="story-director-slots"
         class="story-director-slots"
     ></div>
+        <div class="story-director-options">
+
+        <label class="story-director-checkbox">
+            <input
+                type="checkbox"
+                id="story-director-different"
+                checked
+            >
+            <span>Vorschläge müssen sich unterscheiden</span>
+        </label>
+
+        <label class="story-director-checkbox">
+            <input
+                type="checkbox"
+                id="story-director-story-threads"
+                checked
+            >
+            <span>Bestehende Storyfäden bevorzugen</span>
+        </label>
+
+        <label class="story-director-checkbox">
+            <input
+                type="checkbox"
+                id="story-director-avoid-recent"
+                checked
+            >
+            <span>Kürzlich verwendete Ideen vermeiden</span>
+        </label>
+
+    </div>
 
 </div>
     `;
@@ -496,6 +526,30 @@ const savedSettings = loadSuggestionSettings();
 if (savedSettings) {
     slotCountSelect.value = String(savedSettings.slotCount);
     renderSlots(savedSettings.slots);
+
+    const differentSuggestions =
+        panel.querySelector('#story-director-different');
+
+    const preferStoryThreads =
+        panel.querySelector('#story-director-story-threads');
+
+    const avoidRecentIdeas =
+        panel.querySelector('#story-director-avoid-recent');
+
+    if (differentSuggestions) {
+        differentSuggestions.checked =
+            savedSettings.differentSuggestions ?? true;
+    }
+
+    if (preferStoryThreads) {
+        preferStoryThreads.checked =
+            savedSettings.preferStoryThreads ?? true;
+    }
+
+    if (avoidRecentIdeas) {
+        avoidRecentIdeas.checked =
+            savedSettings.avoidRecentIdeas ?? true;
+    }
 } else {
     renderSlots();
 }
@@ -504,6 +558,15 @@ function saveSuggestionSettings(slotCountSelect, slotsContainer) {
     const settings = {
         slotCount: Number(slotCountSelect.value),
         slots: [],
+
+        differentSuggestions:
+            document.getElementById('story-director-different')?.checked ?? true,
+
+        preferStoryThreads:
+            document.getElementById('story-director-story-threads')?.checked ?? true,
+
+        avoidRecentIdeas:
+            document.getElementById('story-director-avoid-recent')?.checked ?? true,
     };
 
     slotsContainer.querySelectorAll('.story-director-select').forEach(select => {
