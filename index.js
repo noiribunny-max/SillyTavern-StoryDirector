@@ -151,7 +151,106 @@ function createStoryDirectorPanel() {
         </label>
 
     </div>
+   
+    <div class="story-director-generation">
 
+        <div class="story-director-generation-title">
+            🧠 Director-Generation
+        </div>
+
+        <label class="story-director-checkbox">
+            <input
+                type="checkbox"
+                id="story-director-custom-tokens"
+                checked
+            >
+            <span>Director verwendet eigene Antwortlängen</span>
+        </label>
+
+        <div class="story-director-token-settings">
+
+            <div class="story-director-token-setting">
+                <label
+                    class="story-director-setting-label"
+                    for="story-director-tokens-event"
+                >
+                    🎲 Event
+                </label>
+
+                <select
+                    id="story-director-tokens-event"
+                    class="story-director-select"
+                >
+                    <option value="500">500 Tokens</option>
+                    <option value="800" selected>800 Tokens</option>
+                    <option value="1200">1200 Tokens</option>
+                    <option value="1600">1600 Tokens</option>
+                    <option value="2000">2000 Tokens</option>
+                </select>
+            </div>
+
+            <div class="story-director-token-setting">
+                <label
+                    class="story-director-setting-label"
+                    for="story-director-tokens-twist"
+                >
+                    🌀 Twist
+                </label>
+
+                <select
+                    id="story-director-tokens-twist"
+                    class="story-director-select"
+                >
+                    <option value="800">800 Tokens</option>
+                    <option value="1200">1200 Tokens</option>
+                    <option value="1400" selected>1400 Tokens</option>
+                    <option value="1600">1600 Tokens</option>
+                    <option value="2000">2000 Tokens</option>
+                </select>
+            </div>
+
+            <div class="story-director-token-setting">
+                <label
+                    class="story-director-setting-label"
+                    for="story-director-tokens-timeskip"
+                >
+                    ⏩ Time Skip
+                </label>
+
+                <select
+                    id="story-director-tokens-timeskip"
+                    class="story-director-select"
+                >
+                    <option value="800">800 Tokens</option>
+                    <option value="1200" selected>1200 Tokens</option>
+                    <option value="1600">1600 Tokens</option>
+                    <option value="2000">2000 Tokens</option>
+                </select>
+            </div>
+
+            <div class="story-director-token-setting">
+                <label
+                    class="story-director-setting-label"
+                    for="story-director-tokens-unstuck"
+                >
+                    🆘 Story retten
+                </label>
+
+                <select
+                    id="story-director-tokens-unstuck"
+                    class="story-director-select"
+                >
+                    <option value="1000">1000 Tokens</option>
+                    <option value="1400">1400 Tokens</option>
+                    <option value="1600" selected>1600 Tokens</option>
+                    <option value="2000">2000 Tokens</option>
+                    <option value="2500">2500 Tokens</option>
+                </select>
+            </div>
+
+        </div>
+
+    </div>
 </div>
     `;
 
@@ -520,7 +619,7 @@ function setupSuggestionSettings(panel) {
     slotsContainer.addEventListener('change', () => {
         saveSuggestionSettings(slotCountSelect, slotsContainer);
     });
-    
+
         const checkboxIds = [
         'story-director-different',
         'story-director-story-threads',

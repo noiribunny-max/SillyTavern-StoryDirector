@@ -404,3 +404,33 @@
 .story-director-checkbox span {
     flex: 1;
 }
+
+.story-director-generation {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--SmartThemeBorderColor, #555);
+}
+
+.story-director-generation-title {
+    margin-bottom: 8px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.story-director-token-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.story-director-token-setting {
+    padding: 9px;
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.story-director-token-setting .story-director-setting-label {
+    margin-bottom: 6px;
+}
