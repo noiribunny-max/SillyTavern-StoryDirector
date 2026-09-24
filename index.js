@@ -1,5 +1,74 @@
 const HUD_POSITION_KEY = 'story-director-hud-position';
 
+async function generateDirectorResponse(prompt, maxTokens) {
+    const context = SillyTavern.getContext();
+    const connectionService =
+        context.ConnectionManagerRequestService;
+
+    const profileId =
+        context.extensionSettings?.connectionManager?.selectedProfile;
+
+    if (!profileId) {
+        throw new Error(
+            '[Story Director] Kein aktives Connection Profile gefunden.'
+        );
+    }
+
+    try {
+        const result = await connectionService.sendRequest(
+            profileId,
+            prompt,
+            maxTokens,
+            {
+                stream: false,
+                extractData: true,
+            }
+        );
+
+        if (typeof result === 'string') {
+            return result;
+        }
+
+        if (result?.content) {
+            return result.content;
+        }
+
+        throw new Error(
+            '[Story Director] Die KI hat keinen Text zurückgegeben.'
+        );
+    } catch (error) {
+        console.error(
+            '[Story Director] Generation failed:',
+            error
+        );
+
+        throw error;
+    }
+}
+
+window.testStoryDirectorConnection = async () => {
+    try {
+        const response = await generateDirectorResponse(
+            'Antworte nur mit: Story Director online.',
+            100
+        );
+
+        console.log(
+            '[Story Director] TEST RESPONSE:',
+            response
+        );
+
+        return response;
+    } catch (error) {
+        console.error(
+            '[Story Director] TEST FAILED:',
+            error
+        );
+
+        throw error;
+    }
+};
+
 export async function init() {
     console.log('[Story Director] Extension loaded!');
     console.log('[Story Director] Starting UI...');
@@ -653,7 +722,7 @@ function setupSuggestionSettings(panel) {
             });
         }
     });
-    
+
 const savedSettings = loadSuggestionSettings();
 
 if (savedSettings) {
