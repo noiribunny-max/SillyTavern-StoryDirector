@@ -138,6 +138,44 @@ window.testStoryDirectorWorldInfoContext = async () => {
     return await getStoryDirectorWorldInfoContext(100);
 };
 
+function getStoryDirectorContext({
+    chatLimit = 100,
+} = {}) {
+    const chat = getStoryDirectorChatContext(chatLimit);
+
+    const worldInfo = getStoryDirectorWorldInfoContext(chatLimit);
+
+    const loreEntries = [
+        worldInfo.worldInfoString,
+        worldInfo.worldInfoBefore,
+        worldInfo.worldInfoAfter,
+        ...(worldInfo.worldInfoExamples ?? []),
+        ...(worldInfo.worldInfoDepth ?? []).flatMap(
+            depthEntry => depthEntry.entries ?? []
+        ),
+    ]
+        .filter(entry =>
+            typeof entry === 'string' &&
+            entry.trim()
+        )
+        .map(entry => entry.trim());
+
+    const uniqueLoreEntries = [
+        ...new Set(loreEntries),
+    ];
+
+    return {
+        chat,
+        lore: uniqueLoreEntries,
+    };
+}
+
+window.testStoryDirectorContext = async () => {
+    return getStoryDirectorContext({
+        chatLimit: 100,
+    });
+};
+
 export async function init() {
     console.log('[Story Director] Extension loaded!');
     console.log('[Story Director] Starting UI...');
