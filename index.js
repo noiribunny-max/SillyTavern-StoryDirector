@@ -109,6 +109,35 @@ window.testStoryDirectorChatContext = () => {
     return getStoryDirectorChatContext(30);
 };
 
+function getStoryDirectorWorldInfoContext(chatLimit = 100) {
+    const context = SillyTavern.getContext();
+
+    const chat = context.chat ?? [];
+
+    const chatForWorldInfo = chat
+        .filter(message =>
+            message &&
+            !message.is_system &&
+            typeof message.mes === 'string' &&
+            message.mes.trim()
+        )
+        .slice(-chatLimit)
+        .map(message =>
+            `${message.name || ''}: ${message.mes.trim()}`
+        )
+        .reverse();
+
+    return context.getWorldInfoPrompt(
+        chatForWorldInfo,
+        25700,
+        true
+    );
+}
+
+window.testStoryDirectorWorldInfoContext = async () => {
+    return await getStoryDirectorWorldInfoContext(100);
+};
+
 export async function init() {
     console.log('[Story Director] Extension loaded!');
     console.log('[Story Director] Starting UI...');
