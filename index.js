@@ -530,13 +530,13 @@ function restoreHudPosition(toggle, panel) {
     }
 }
 
-function handleDirectorAction(action) {
-        if (action === 'settings') {
+async function handleDirectorAction(action) {
+    if (action === 'settings') {
         openSettings();
         return;
     }
+
     const result = document.getElementById('story-director-result');
-    
 
     if (!result) {
         return;
@@ -551,6 +551,95 @@ function handleDirectorAction(action) {
 
     const name = actionNames[action] ?? 'Aktion';
 
+    /*
+     * Der erste echte Director-Test:
+     * Nur "Event" verwendet bereits die KI.
+     */
+    if (action === 'event') {
+        const tokenSelect =
+            document.getElementById('story-director-tokens-event');
+
+        const maxTokens =
+            Number(tokenSelect?.value) || 800;
+
+        result.innerHTML = `
+            <div class="story-director-placeholder">
+                <strong>🎲 Event wird generiert...</strong>
+
+                <p>
+                    🦉 Die Eule denkt nach...
+                </p>
+            </div>
+        `;
+
+        try {
+            const prompt = `
+Du bist der Story Director eines langfristigen RPGs.
+
+Erzeuge EINE konkrete Idee für ein mögliches zukünftiges Story-Event.
+
+Wichtig:
+- Noch keine endgültige Handlung festschreiben.
+- Keine Meta-Erklärung.
+- Keine Aufzählung mehrerer Möglichkeiten.
+- Die Idee soll als Inspiration für den Spieler dienen.
+- Schreibe auf Deutsch.
+- Sei konkret und erzählerisch.
+`;
+
+            const response =
+                await generateDirectorResponse(
+                    prompt,
+                    maxTokens
+                );
+
+            result.innerHTML = `
+                <div class="story-director-result-card">
+                    <strong>🎲 Event-Vorschlag</strong>
+
+                    <div class="story-director-result-text"></div>
+                </div>
+            `;
+
+            const textElement =
+                result.querySelector('.story-director-result-text');
+
+            if (textElement) {
+                textElement.textContent = response;
+            }
+
+            console.log(
+                '[Story Director] Event generated:',
+                response
+            );
+
+        } catch (error) {
+            result.innerHTML = `
+                <div class="story-director-placeholder">
+                    <strong>❌ Fehler bei der Generierung</strong>
+
+                    <p>
+                        Die Eule konnte keine Antwort bekommen.
+                    </p>
+
+                    <small>
+                        Sieh in der Browser-Konsole nach.
+                    </small>
+                </div>
+            `;
+
+            console.error(
+                '[Story Director] Event generation failed:',
+                error
+            );
+        }
+
+        return;
+    }
+
+    /*
+     * Die anderen Funktionen bleiben vorerst Platzhalter.
+     */
     result.innerHTML = `
         <div class="story-director-placeholder">
             <strong>${name}</strong>
@@ -560,8 +649,7 @@ function handleDirectorAction(action) {
             </p>
 
             <small>
-                Die Oberfläche funktioniert bereits –
-                jetzt bekommt der Director sein Gehirn.
+                Die Verbindung zur KI funktioniert bereits.
             </small>
         </div>
     `;
