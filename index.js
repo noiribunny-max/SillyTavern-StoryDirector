@@ -520,6 +520,22 @@ function setupSuggestionSettings(panel) {
     slotsContainer.addEventListener('change', () => {
         saveSuggestionSettings(slotCountSelect, slotsContainer);
     });
+    
+        const checkboxIds = [
+        'story-director-different',
+        'story-director-story-threads',
+        'story-director-avoid-recent',
+    ];
+
+    checkboxIds.forEach(id => {
+        const checkbox = panel.querySelector(`#${id}`);
+
+        if (checkbox) {
+            checkbox.addEventListener('change', () => {
+                saveSuggestionSettings(slotCountSelect, slotsContainer);
+            });
+        }
+    });
 
 const savedSettings = loadSuggestionSettings();
 
