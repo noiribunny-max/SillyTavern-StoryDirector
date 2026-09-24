@@ -138,6 +138,48 @@ window.testStoryDirectorWorldInfoContext = async () => {
     return await getStoryDirectorWorldInfoContext(100);
 };
 
+function getStoryDirectorDoomTrackerContext() {
+    const context = SillyTavern.getContext();
+    const chat = context.chat ?? [];
+
+    // Die letzte Assistant-Nachricht finden
+    for (let i = chat.length - 1; i >= 0; i--) {
+        const message = chat[i];
+
+        if (
+            !message ||
+            message.is_user ||
+            message.is_system
+        ) {
+            continue;
+        }
+
+        const swipeId = message.swipe_id || 0;
+
+        const swipeData =
+            message.extra?.dooms_tracker_swipes?.[swipeId];
+
+        if (!swipeData) {
+            return null;
+        }
+
+        return {
+            swipeId,
+
+            quests:
+                swipeData.quests ?? null,
+
+            infoBox:
+                swipeData.infoBox ?? null,
+
+            characterThoughts:
+                swipeData.characterThoughts ?? null,
+        };
+    }
+
+    return null;
+}
+
 async function getStoryDirectorContext({
     chatLimit = 100,
 } = {}) {
@@ -164,10 +206,13 @@ async function getStoryDirectorContext({
     const uniqueLoreEntries = [
         ...new Set(loreEntries),
     ];
-
+    
+    const doomTracker =
+        getStoryDirectorDoomTrackerContext();
     return {
         chat,
         lore: uniqueLoreEntries,
+        doomTracker,
     };
 }
 
