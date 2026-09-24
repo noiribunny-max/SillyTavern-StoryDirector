@@ -25,6 +25,11 @@ async function generateDirectorResponse(prompt, maxTokens) {
             }
         );
 
+console.log(
+    '[Story Director] RAW API RESULT:',
+    result
+);
+
         if (typeof result === 'string') {
             return result;
         }
