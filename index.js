@@ -237,6 +237,59 @@ export async function init() {
     }
 }
 
+function formatStoryDirectorContextForPrompt(storyContext) {
+    const chatText = (storyContext.chat ?? [])
+        .map(message => {
+            const speaker = message.isUser
+                ? 'USER'
+                : (message.name || 'CHARAKTER');
+
+            return `${speaker}: ${message.text}`;
+        })
+        .join('\n\n');
+
+    const loreText = (storyContext.lore ?? [])
+        .map((entry, index) =>
+            `[Lorebook ${index + 1}]\n${entry}`
+        )
+        .join('\n\n');
+
+    const doom = storyContext.doomTracker;
+
+    let doomText = '';
+
+    if (doom) {
+        doomText = [
+            '[DOOM TRACKER]',
+
+            doom.infoBox
+                ? `Scene / InfoBox:\n${doom.infoBox}`
+                : '',
+
+            doom.quests
+                ? `Quests:\n${doom.quests}`
+                : '',
+
+            doom.characterThoughts
+                ? `Character Thoughts:\n${doom.characterThoughts}`
+                : '',
+        ]
+            .filter(Boolean)
+            .join('\n\n');
+    }
+
+    return [
+        '=== CHATVERLAUF ===',
+        chatText || '(Kein Chatverlauf verfügbar.)',
+
+        '=== LOREBOOK / WORLD INFO ===',
+        loreText || '(Keine relevanten Lorebook-Einträge aktiviert.)',
+
+        '=== DOOM TRACKER ===',
+        doomText || '(Keine Doom-Tracker-Daten verfügbar.)',
+    ].join('\n\n');
+}
+
 function createStoryDirectorPanel() {
     if (document.getElementById('story-director-panel')) {
         return;
