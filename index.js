@@ -278,13 +278,7 @@ function formatStoryDirectorContextForPrompt(storyContext) {
             .join('\n\n');
     }
 
-    window.testStoryDirectorFormattedContext = async () => {
-    const storyContext = await getStoryDirectorContext({
-        chatLimit: 100,
-    });
-
-    return formatStoryDirectorContextForPrompt(storyContext);
-};
+   
 
     return [
         '=== CHATVERLAUF ===',
@@ -297,6 +291,14 @@ function formatStoryDirectorContextForPrompt(storyContext) {
         doomText || '(Keine Doom-Tracker-Daten verfügbar.)',
     ].join('\n\n');
 }
+
+window.testStoryDirectorFormattedContext = async () => {
+    const storyContext = await getStoryDirectorContext({
+        chatLimit: 100,
+    });
+
+    return formatStoryDirectorContextForPrompt(storyContext);
+};
 
 function createStoryDirectorPanel() {
     if (document.getElementById('story-director-panel')) {
