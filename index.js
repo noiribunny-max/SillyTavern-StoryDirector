@@ -826,6 +826,76 @@ Wichtig:
 - Sei konkret und erzählerisch.
 `;
 
+const response =
+    await generateDirectorResponse(
+        prompt,
+        maxTokens
+    );
+
+result.innerHTML = `
+    <div class="story-director-result-card">
+        <strong>🎲 Event-Vorschlag</strong>
+
+        <div class="story-director-result-text"></div>
+    </div>
+`;
+
+const textElement =
+    result.querySelector('.story-director-result-text');
+
+if (textElement) {
+    textElement.textContent = response;
+}
+
+console.log(
+    '[Story Director] Event generated:',
+    response
+);
+
+} catch (error) {
+    result.innerHTML = `
+        <div class="story-director-placeholder">
+            <strong>❌ Fehler bei der Generierung</strong>
+
+            <p>
+                Die Eule konnte keine Antwort bekommen.
+            </p>
+
+            <small>
+                Sieh in der Browser-Konsole nach.
+            </small>
+        </div>
+    `;
+
+    console.error(
+        '[Story Director] Event generation failed:',
+        error
+    );
+}
+
+return;
+}
+
+/*
+ * Die anderen Funktionen bleiben vorerst Platzhalter.
+ */
+result.innerHTML = `
+    <div class="story-director-placeholder">
+        <strong>${name}</strong>
+
+        <p>
+            Diese Funktion kommt als Nächstes. 🦉
+        </p>
+
+        <small>
+            Die Verbindung zur KI funktioniert bereits.
+        </small>
+    </div>
+`;
+
+console.log(`[Story Director] Action: ${action}`);
+}
+
 function openSettings() {
     const section = document.querySelector('.story-director-section');
     const result = document.getElementById('story-director-result');
