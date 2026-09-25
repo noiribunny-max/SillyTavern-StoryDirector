@@ -278,6 +278,14 @@ function formatStoryDirectorContextForPrompt(storyContext) {
             .join('\n\n');
     }
 
+    window.testStoryDirectorFormattedContext = async () => {
+    const storyContext = await getStoryDirectorContext({
+        chatLimit: 100,
+    });
+
+    return formatStoryDirectorContextForPrompt(storyContext);
+};
+
     return [
         '=== CHATVERLAUF ===',
         chatText || '(Kein Chatverlauf verfügbar.)',
