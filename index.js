@@ -1068,6 +1068,50 @@ window.testStoryDirectorAllEvents = async () => {
     return await generateStoryDirectorEvents();
 };
 
+async function generateStoryDirectorEvents() {
+    console.log(
+        '[Story Director] Generating all event slots...'
+    );
+
+    const slots =
+        getStoryDirectorSlotSettings();
+
+    if (!slots.length) {
+        throw new Error(
+            '[Story Director] Keine Event-Slots konfiguriert.'
+        );
+    }
+
+    const storyContext =
+        await getStoryDirectorContext({
+            chatLimit: 100,
+        });
+
+    const formattedContext =
+        formatStoryDirectorContextForPrompt(
+            storyContext
+        );
+
+    const results = [];
+
+    for (const slot of slots) {
+        const result =
+            await generateEventForSlot(
+                slot,
+                formattedContext
+            );
+
+        results.push(result);
+    }
+
+    console.log(
+        '[Story Director] All event slots generated:',
+        results
+    );
+
+    return results;
+}
+
 async function handleDirectorAction(action) {
     if (action === 'settings') {
         openSettings();
@@ -1093,7 +1137,7 @@ async function handleDirectorAction(action) {
      * Der erste echte Director-Test:
      * Nur "Event" verwendet bereits die KI.
      */
-    
+
 if (action === 'event') {
     if (storyDirectorState.eventGenerationInProgress) {
         console.log(
