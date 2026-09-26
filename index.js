@@ -955,11 +955,99 @@ async function generateEventForSlot(slot) {
             slot.task
         );
 
+    const storyContext =
+        await getStoryDirectorContext({
+            chatLimit: 100,
+        });
+
+    const formattedContext =
+        formatStoryDirectorContextForPrompt(
+            storyContext
+        );
+
+    const prompt = `
+Du bist der Story Director eines langfristigen RPGs.
+
+Du entwickelst aus dem folgenden Story-Kontext EINE konkrete Idee
+für ein mögliches zukünftiges Story-Event.
+
+=== AKTUELLER STORY-KONTEXT ===
+
+${formattedContext}
+
+=== DRAMATURGISCHER FOKUS ===
+
+${taskInstruction}
+
+=== AUFGABE ===
+
+Erzeuge EIN konkretes Story-Event, das sich natürlich aus der
+bisherigen Geschichte entwickeln kann.
+
+WICHTIGE REGELN:
+
+- Berücksichtige den bisherigen Chatverlauf und die aktuelle Situation.
+- Berücksichtige relevante Lorebook-Informationen.
+- Berücksichtige den Doom Tracker.
+- Baue möglichst auf bestehenden Charakterbeziehungen,
+  offenen Situationen und Handlungsfäden auf.
+- Das Event soll eine konkrete neue Entwicklung oder ein konkretes
+  Geschehen darstellen.
+- Das Event darf neue Impulse einführen, soll aber zur bestehenden
+  Geschichte passen.
+- Schreibe KEINE Erklärung darüber, warum das Event zur Geschichte passt.
+- Schreibe KEINE Analyse deiner eigenen Überlegungen.
+- Schreibe KEINE möglichen weiteren Entwicklungen.
+- Schreibe KEINE Eskalationsstufen.
+- Schreibe KEINEN vollständigen Story-Arc.
+- Schreibe KEINE Liste mit mehreren möglichen Events.
+- Lege keine Entscheidung oder Reaktion für den Spieler endgültig fest.
+- Lass den Charakteren Raum, auf das Ereignis selbst zu reagieren.
+- Das Ergebnis soll als direkte Inspiration für die nächste RPG-Szene
+  verwendbar sein.
+- Schreibe auf Deutsch.
+- Sei konkret, aber schreibe keine fertige Szene.
+- Formuliere den Output als kompakten Regie-Vorschlag.
+- Beschreibe kurz und sachlich, welches Ereignis als Nächstes eintreten könnte.
+- Schreibe NICHT die Szene selbst aus.
+- Verwende keine ausführliche Atmosphäre oder Sinneseindrücke.
+- Schreibe keine Dialoge.
+- Schreibe keine inneren Monologe.
+- Erzähle nicht Schritt für Schritt, wie die Szene abläuft.
+- Der Vorschlag soll eine konkrete Idee liefern, die der Spieler anschließend
+  selbst in der RPG-Szene umsetzen kann.
+- Verwende einen passenden Titel für das Event.
+- Halte den Vorschlag bei ungefähr 80–150 Wörtern.
+- Schreibe maximal 2 kurze Absätze.
+- Vermeide unnötige Wiederholungen bereits geschehener Ereignisse.
+
+FORMAT:
+
+# Event-Titel
+
+[Konkrete Beschreibung des Ereignisses.]
+`;
+
+    const response =
+        await generateDirectorResponse(
+            prompt,
+            maxTokens
+        );
+
+    console.log(
+        '[Story Director] Event slot generated:',
+        {
+            slot: slot.slot,
+            task: slot.task,
+            response,
+        }
+    );
+
     return {
         slot: slot.slot,
         task: slot.task,
-        instruction: taskInstruction,
-        maxTokens,
+        label: getStoryDirectorTaskLabel(slot.task),
+        response,
     };
 }
 
