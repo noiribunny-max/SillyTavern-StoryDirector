@@ -216,9 +216,6 @@ function findRelevantStoryDirectorLorebookEntries(
         const comment =
             (entry.comment ?? '').toLowerCase();
 
-        const content =
-            (entry.content ?? '').toLowerCase();
-
         let score = 0;
 
         for (const word of uniqueWords) {
@@ -236,11 +233,6 @@ function findRelevantStoryDirectorLorebookEntries(
             // Treffer im Namen / Kommentar des Eintrags
             if (comment.includes(word)) {
                 score += 8;
-            }
-
-            // Treffer im eigentlichen Lorebook-Inhalt
-            if (content.includes(word)) {
-                score += 1;
             }
         }
 
