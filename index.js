@@ -936,6 +936,45 @@ function restoreHudPosition(toggle, panel) {
     }
 }
 
+async function generateEventForSlot(slot) {
+    console.log(
+        '[Story Director] Generating event for slot:',
+        slot
+    );
+
+    const tokenSelect =
+        document.getElementById(
+            'story-director-tokens-event'
+        );
+
+    const maxTokens =
+        Number(tokenSelect?.value) || 800;
+
+    const taskInstruction =
+        getStoryDirectorTaskInstruction(
+            slot.task
+        );
+
+    return {
+        slot: slot.slot,
+        task: slot.task,
+        instruction: taskInstruction,
+        maxTokens,
+    };
+}
+
+window.testStoryDirectorEventSlot = async () => {
+    const slots = getStoryDirectorSlotSettings();
+
+    const slot1 =
+        slots.find(slot => slot.slot === 1) ?? {
+            slot: 1,
+            task: 'random',
+        };
+
+    return await generateEventForSlot(slot1);
+};
+
 async function handleDirectorAction(action) {
     if (action === 'settings') {
         openSettings();
