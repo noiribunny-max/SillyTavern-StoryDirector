@@ -1436,6 +1436,39 @@ window.testStoryDirectorSlotSettings = () => {
     return getStoryDirectorSlotSettings();
 };
 
+function getStoryDirectorTaskLabel(task) {
+    const labels = {
+        random: 'Zufällig',
+        positive: 'Positiver Verlauf',
+        negative: 'Negativer Verlauf',
+        gore: 'Gore / Gewalt',
+        danger: 'Gefahr',
+        twist: 'Twist',
+        romance: 'Romantik',
+        relationship: 'Beziehung',
+        character: 'Charakterentwicklung',
+        mystery: 'Mystery',
+        horror: 'Horror',
+        conflict: 'Konflikt',
+        humor: 'Humor',
+        worldbuilding: 'Worldbuilding',
+        consequence: 'Konsequenz',
+        storythread: 'Storyfaden',
+    };
+
+    return labels[task] || task || 'Zufällig';
+}
+
+window.testStoryDirectorTaskLabel = () => {
+    const slots = getStoryDirectorSlotSettings();
+
+    return slots.map(slot => ({
+        slot: slot.slot,
+        task: slot.task,
+        label: getStoryDirectorTaskLabel(slot.task),
+    }));
+};
+
 function loadSuggestionSettings() {
     const saved = localStorage.getItem(
         'story-director-suggestion-settings'
