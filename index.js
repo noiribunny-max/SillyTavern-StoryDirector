@@ -178,45 +178,75 @@ function findRelevantStoryDirectorLorebookEntries(
         return [];
     }
 
-    const search = searchText.toLowerCase();
+    const stopWords = new Set([
+        'und', 'oder', 'der', 'die', 'das',
+        'den', 'dem', 'des', 'ein', 'eine',
+        'einer', 'einem', 'einen',
+        'ist', 'war', 'wird', 'hat', 'haben',
+        'sich', 'sie', 'er', 'es', 'ich',
+        'du', 'wir', 'ihr', 'mit', 'von',
+        'auf', 'für', 'aus', 'bei', 'nach',
+        'vor', 'über', 'unter', 'aber',
+        'nicht', 'noch', 'nur', 'auch',
+        'dann', 'wenn', 'wie', 'so',
+        'the', 'and', 'or', 'was', 'were',
+        'this', 'that', 'with', 'from',
+    ]);
 
-    const words = search
+    const words = searchText
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
         .split(/\s+/)
         .map(word => word.trim())
-        .filter(word => word.length >= 3);
+        .filter(word =>
+            word.length >= 3 &&
+            !stopWords.has(word)
+        );
+
+    const uniqueWords = [...new Set(words)];
 
     const scoredEntries = entries.map(entry => {
-        const keyText = [
+        const keys = [
             ...(entry.key ?? []),
             ...(entry.secondary ?? []),
         ]
-            .join(' ')
-            .toLowerCase();
+            .filter(value => typeof value === 'string')
+            .map(value => value.trim().toLowerCase());
 
-        const commentText =
+        const comment =
             (entry.comment ?? '').toLowerCase();
 
-        const contentText =
+        const content =
             (entry.content ?? '').toLowerCase();
 
         let score = 0;
 
-        for (const word of words) {
-            if (keyText.includes(word)) {
-                score += 10;
+        for (const word of uniqueWords) {
+
+            // Exakte bzw. sehr direkte Treffer in Lorebook-Keys
+            for (const key of keys) {
+                if (
+                    key === word ||
+                    key.includes(word)
+                ) {
+                    score += 20;
+                }
             }
 
-            if (commentText.includes(word)) {
-                score += 5;
+            // Treffer im Namen / Kommentar des Eintrags
+            if (comment.includes(word)) {
+                score += 8;
             }
 
-            if (contentText.includes(word)) {
+            // Treffer im eigentlichen Lorebook-Inhalt
+            if (content.includes(word)) {
                 score += 1;
             }
         }
 
+        // Konstante Einträge sind grundsätzlich etwas wichtiger.
         if (entry.constant) {
-            score += 2;
+            score += 3;
         }
 
         return {
