@@ -1023,10 +1023,13 @@ WICHTIGE REGELN:
 - Das Ergebnis soll als direkte Inspiration für die nächste RPG-Szene
   verwendbar sein.
 - Schreibe auf Deutsch.
-- Sei konkret, erzählerisch und atmosphärisch.
+- Sei konkret, aber schreibe keine fertige Szene.
+- Formuliere den Output als kompakten Regie-Vorschlag.
+- Beschreibe, was als Nächstes passieren könnte und wie es die
+  bestehende Geschichte weiterbewegt.
 - Verwende einen passenden Titel für das Event.
-- Beschreibe das Ereignis in ungefähr 2–5 Absätzen.
-- Vermeide unnötige Wiederholungen bereits geschehener Ereignisse.
+- Halte den Vorschlag kurz und fokussiert: ungefähr 1–3 kurze Absätze.
+- Schreibe keine Dialogszene und keine ausführliche Prosa.- Vermeide unnötige Wiederholungen bereits geschehener Ereignisse.
 
 FORMAT:
 
@@ -1040,7 +1043,7 @@ const response =
         prompt,
         maxTokens
     );
-    
+
 const textElement =
     result.querySelector('.story-director-result-text');
 
