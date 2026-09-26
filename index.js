@@ -167,6 +167,81 @@ async function getStoryDirectorBoundLorebookContext() {
     };
 }
 
+function findRelevantStoryDirectorLorebookEntries(
+    lorebookContext,
+    searchText,
+    limit = 20
+) {
+    const entries = lorebookContext?.entries ?? [];
+
+    if (!searchText || !entries.length) {
+        return [];
+    }
+
+    const search = searchText.toLowerCase();
+
+    const words = search
+        .split(/\s+/)
+        .map(word => word.trim())
+        .filter(word => word.length >= 3);
+
+    const scoredEntries = entries.map(entry => {
+        const keyText = [
+            ...(entry.key ?? []),
+            ...(entry.secondary ?? []),
+        ]
+            .join(' ')
+            .toLowerCase();
+
+        const commentText =
+            (entry.comment ?? '').toLowerCase();
+
+        const contentText =
+            (entry.content ?? '').toLowerCase();
+
+        let score = 0;
+
+        for (const word of words) {
+            if (keyText.includes(word)) {
+                score += 10;
+            }
+
+            if (commentText.includes(word)) {
+                score += 5;
+            }
+
+            if (contentText.includes(word)) {
+                score += 1;
+            }
+        }
+
+        if (entry.constant) {
+            score += 2;
+        }
+
+        return {
+            ...entry,
+            score,
+        };
+    });
+
+    return scoredEntries
+        .filter(entry => entry.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit);
+}
+
+window.testStoryDirectorLorebookSearch = async () => {
+    const lorebook =
+        await getStoryDirectorBoundLorebookContext();
+
+    return findRelevantStoryDirectorLorebookEntries(
+        lorebook,
+        'Naruto Mitsuki Konoha Training',
+        20
+    );
+};
+
 window.testStoryDirectorBoundLorebook = async () => {
     return await getStoryDirectorBoundLorebookContext();
 };
