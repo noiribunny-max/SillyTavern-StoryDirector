@@ -1459,6 +1459,60 @@ function getStoryDirectorTaskLabel(task) {
     return labels[task] || task || 'Zufällig';
 }
 
+function getStoryDirectorTaskInstruction(task) {
+    const instructions = {
+        random:
+            'Wähle selbst eine passende dramaturgische Richtung, die sich natürlich aus der aktuellen Geschichte ergibt.',
+
+        positive:
+            'Der Event-Vorschlag soll einen positiven dramaturgischen Verlauf ermöglichen, ohne künstlich oder unrealistisch zu wirken.',
+
+        negative:
+            'Der Event-Vorschlag soll einen negativen dramaturgischen Verlauf ermöglichen, zum Beispiel durch einen Rückschlag, Konflikt, Verlust, Druck oder eine unerwartete Komplikation.',
+
+        gore:
+            'Der Event-Vorschlag soll Gewalt oder Gore als relevantes dramaturgisches Element enthalten, sofern dies zur aktuellen Geschichte passt.',
+
+        danger:
+            'Der Event-Vorschlag soll eine konkrete Gefahr oder Bedrohung einführen, die zur aktuellen Geschichte passt.',
+
+        twist:
+            'Der Event-Vorschlag soll eine überraschende Wendung enthalten, die sich trotzdem nachvollziehbar aus der bisherigen Geschichte entwickeln kann.',
+
+        romance:
+            'Der Event-Vorschlag soll einen romantischen dramaturgischen Fokus haben und die bestehende Beziehung oder emotionale Nähe sinnvoll weiterentwickeln.',
+
+        relationship:
+            'Der Event-Vorschlag soll die Beziehung zwischen bestehenden Charakteren weiterentwickeln oder verändern.',
+
+        character:
+            'Der Event-Vorschlag soll die persönliche Entwicklung eines bestehenden Charakters voranbringen.',
+
+        mystery:
+            'Der Event-Vorschlag soll ein Rätsel, eine offene Frage oder ein verborgenes Detail der Geschichte weiterentwickeln.',
+
+        horror:
+            'Der Event-Vorschlag soll eine passende unheimliche oder bedrohliche Entwicklung enthalten.',
+
+        conflict:
+            'Der Event-Vorschlag soll einen bestehenden oder neuen Konflikt zwischen Figuren oder Interessen weiterentwickeln.',
+
+        humor:
+            'Der Event-Vorschlag soll eine humorvolle Situation erzeugen, die zu den Charakteren und der aktuellen Geschichte passt.',
+
+        worldbuilding:
+            'Der Event-Vorschlag soll einen relevanten Aspekt der Welt, ihrer Regeln, Orte, Gruppen oder Geschichte erweitern.',
+
+        consequence:
+            'Der Event-Vorschlag soll eine nachvollziehbare Konsequenz aus einem bereits geschehenen Ereignis oder einer bestehenden Entscheidung entwickeln.',
+
+        storythread:
+            'Der Event-Vorschlag soll einen bereits bestehenden offenen Storyfaden aufgreifen und sinnvoll weiterführen.',
+    };
+
+    return instructions[task] || instructions.random;
+}
+
 window.testStoryDirectorTaskLabel = () => {
     const slots = getStoryDirectorSlotSettings();
 
