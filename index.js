@@ -1,13 +1,3 @@
-import { chat_metadata } from '../../../script.js';
-import { METADATA_KEY, loadWorldInfo } from '../../../world-info.js';
-
-window.testStoryDirectorBoundLorebook = () => {
-    return {
-        metadataKey: METADATA_KEY,
-        lorebookName: chat_metadata?.[METADATA_KEY] ?? null,
-    };
-};
-
 const HUD_POSITION_KEY = 'story-director-hud-position';
 
 const storyDirectorState = {
