@@ -248,7 +248,7 @@ function findRelevantStoryDirectorLorebookEntries(
     });
 
     return scoredEntries
-        .filter(entry => entry.score > 0)
+        .filter(entry => entry.score >= 8)
         .sort((a, b) => b.score - a.score)
         .slice(0, limit);
 }
@@ -283,7 +283,7 @@ async function getStoryDirectorRelevantLorebookContext(
 
 window.testStoryDirectorRelevantLorebook = async () => {
     return await getStoryDirectorRelevantLorebookContext(
-        10,
+        100,
         20
     );
 };
