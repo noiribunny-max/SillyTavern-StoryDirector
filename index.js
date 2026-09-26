@@ -1,4 +1,13 @@
+import { chat_metadata } from '../../../script.js';
+import { METADATA_KEY, loadWorldInfo } from '../../../world-info.js';
+
 const HUD_POSITION_KEY = 'story-director-hud-position';
+
+const storyDirectorState = {
+    suggestions: [],
+    activeSuggestion: null,
+    activeInstruction: null,
+};
 
 async function generateDirectorResponse(prompt, maxTokens) {
     const context = SillyTavern.getContext();
