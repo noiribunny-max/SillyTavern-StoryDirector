@@ -989,8 +989,8 @@ const formattedContext =
 const prompt = `
 Du bist der Story Director eines langfristigen RPGs.
 
-Du analysierst den folgenden aktuellen Story-Kontext und entwickelst
-daraus EINE konkrete Idee für ein mögliches zukünftiges Story-Event.
+Du entwickelst aus dem folgenden Story-Kontext EINE konkrete Idee
+für ein mögliches zukünftiges Story-Event.
 
 === AKTUELLER STORY-KONTEXT ===
 
@@ -998,35 +998,41 @@ ${formattedContext}
 
 === AUFGABE ===
 
-Erzeuge EINE konkrete Idee für ein mögliches zukünftiges Story-Event.
+Erzeuge EIN konkretes Story-Event, das sich natürlich aus der
+bisherigen Geschichte entwickeln kann.
 
-Wichtig:
-- Berücksichtige den bisherigen Chatverlauf.
+WICHTIGE REGELN:
+
+- Berücksichtige den bisherigen Chatverlauf und die aktuelle Situation.
 - Berücksichtige relevante Lorebook-Informationen.
 - Berücksichtige den Doom Tracker.
-- Das Event muss zur bisherigen Handlung und den beteiligten Charakteren passen.
-- Wiederhole nicht einfach Ereignisse, die bereits passiert sind.
-- Baue möglichst auf bestehenden Handlungsfäden, Beziehungen, Konflikten oder offenen Situationen auf.
-- Keine endgültige Handlung für den Spieler festschreiben.
-- Keine Meta-Erklärung über deine Analyse.
-- Keine Aufzählung mehrerer Möglichkeiten.
-- Die Idee soll als Inspiration für den Spieler dienen.
+- Baue möglichst auf bereits bestehenden Charakterbeziehungen,
+  offenen Situationen und Handlungsfäden auf.
+- Das Event soll eine konkrete neue Entwicklung oder ein konkretes
+  Geschehen darstellen.
+- Das Event darf neue Impulse einführen, soll aber zur bestehenden
+  Geschichte passen.
+- Schreibe KEINE Erklärung darüber, warum das Event zur Geschichte passt.
+- Schreibe KEINE Analyse deiner eigenen Überlegungen.
+- Schreibe KEINE möglichen weiteren Entwicklungen.
+- Schreibe KEINE Eskalationsstufen.
+- Schreibe KEINEN vollständigen Story-Arc.
+- Schreibe KEINE Liste mit mehreren möglichen Events.
+- Lege keine Entscheidung oder Reaktion für den Spieler endgültig fest.
+- Lass den Charakteren Raum, auf das Ereignis selbst zu reagieren.
+- Das Ergebnis soll als direkte Inspiration für die nächste RPG-Szene
+  verwendbar sein.
 - Schreibe auf Deutsch.
-- Sei konkret und erzählerisch.
-`;
+- Sei konkret, erzählerisch und atmosphärisch.
+- Verwende einen passenden Titel für das Event.
+- Beschreibe das Ereignis in ungefähr 2–5 Absätzen.
+- Vermeide unnötige Wiederholungen bereits geschehener Ereignisse.
 
-const response =
-    await generateDirectorResponse(
-        prompt,
-        maxTokens
-    );
+FORMAT:
 
-result.innerHTML = `
-    <div class="story-director-result-card">
-        <strong>🎲 Event-Vorschlag</strong>
+# Event-Titel
 
-        <div class="story-director-result-text"></div>
-    </div>
+[Konkrete Beschreibung des Ereignisses in 2–5 Absätzen.]
 `;
 
 const textElement =
