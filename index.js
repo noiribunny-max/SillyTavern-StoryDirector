@@ -1406,6 +1406,36 @@ function saveSuggestionSettings(slotCountSelect, slotsContainer) {
     console.log('[Story Director] Suggestion settings saved:', settings);
 }
 
+function getStoryDirectorSlotSettings() {
+    const saved =
+        localStorage.getItem(
+            'story-director-suggestion-settings'
+        );
+
+    if (!saved) {
+        return [];
+    }
+
+    try {
+        const settings = JSON.parse(saved);
+
+        return Array.isArray(settings.slots)
+            ? settings.slots
+            : [];
+    } catch (error) {
+        console.error(
+            '[Story Director] Slot settings could not be read:',
+            error
+        );
+
+        return [];
+    }
+}
+
+window.testStoryDirectorSlotSettings = () => {
+    return getStoryDirectorSlotSettings();
+};
+
 function loadSuggestionSettings() {
     const saved = localStorage.getItem(
         'story-director-suggestion-settings'
