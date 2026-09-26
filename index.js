@@ -1513,6 +1513,16 @@ function getStoryDirectorTaskInstruction(task) {
     return instructions[task] || instructions.random;
 }
 
+window.testStoryDirectorTaskInstruction = () => {
+    const slots = getStoryDirectorSlotSettings();
+
+    return slots.map(slot => ({
+        slot: slot.slot,
+        task: slot.task,
+        instruction: getStoryDirectorTaskInstruction(slot.task),
+    }));
+};
+
 window.testStoryDirectorTaskLabel = () => {
     const slots = getStoryDirectorSlotSettings();
 
