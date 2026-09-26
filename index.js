@@ -380,36 +380,27 @@ function getStoryDirectorDoomTrackerContext() {
 
 async function getStoryDirectorContext({
     chatLimit = 100,
+    loreLimit = 20,
 } = {}) {
-    const chat = getStoryDirectorChatContext(chatLimit);
+    const chat =
+        getStoryDirectorChatContext(chatLimit);
 
-     const worldInfo =
-    await getStoryDirectorWorldInfoContext(chatLimit);
+    const relevantLore =
+        await getStoryDirectorRelevantLorebookContext(
+            chatLimit,
+            loreLimit
+        );
 
-    const loreEntries = [
-        worldInfo.worldInfoString,
-        worldInfo.worldInfoBefore,
-        worldInfo.worldInfoAfter,
-        ...(worldInfo.worldInfoExamples ?? []),
-        ...(worldInfo.worldInfoDepth ?? []).flatMap(
-            depthEntry => depthEntry.entries ?? []
-        ),
-    ]
-        .filter(entry =>
-            typeof entry === 'string' &&
-            entry.trim()
-        )
-        .map(entry => entry.trim());
-
-    const uniqueLoreEntries = [
-        ...new Set(loreEntries),
-    ];
-    
     const doomTracker =
         getStoryDirectorDoomTrackerContext();
+
     return {
         chat,
-        lore: uniqueLoreEntries,
+        lore: relevantLore.entries.map(entry =>
+            entry.content
+        ),
+        lorebookName:
+            relevantLore.lorebookName,
         doomTracker,
     };
 }
