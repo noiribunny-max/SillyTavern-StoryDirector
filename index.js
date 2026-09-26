@@ -4,6 +4,7 @@ const storyDirectorState = {
     suggestions: [],
     activeSuggestion: null,
     activeInstruction: null,
+    eventGenerationInProgress: false,
 };
 
 async function generateDirectorResponse(prompt, maxTokens) {
@@ -967,6 +968,15 @@ async function handleDirectorAction(action) {
         const maxTokens =
             Number(tokenSelect?.value) || 800;
 
+                if (storyDirectorState.eventGenerationInProgress) {
+        console.log(
+            '[Story Director] Event generation already running.'
+        );
+        return;
+    }
+
+    storyDirectorState.eventGenerationInProgress = true;
+
         result.innerHTML = `
             <div class="story-director-placeholder">
                 <strong>🎲 Event wird generiert...</strong>
@@ -1063,6 +1073,8 @@ console.log(
     response
 );
 
+storyDirectorState.eventGenerationInProgress = false;
+
 } catch (error) {
     result.innerHTML = `
         <div class="story-director-placeholder">
@@ -1083,6 +1095,7 @@ console.log(
         error
     );
 }
+storyDirectorState.eventGenerationInProgress = false;
 
 return;
 }
