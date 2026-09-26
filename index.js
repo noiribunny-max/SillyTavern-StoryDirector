@@ -996,6 +996,17 @@ async function handleDirectorAction(action) {
 const formattedContext =
     formatStoryDirectorContextForPrompt(storyContext);
 
+    const slotSettings = getStoryDirectorSlotSettings();
+
+const slot1 =
+    slotSettings.find(slot => slot.slot === 1) ?? {
+        slot: 1,
+        task: 'random',
+    };
+
+const slot1Instruction =
+    getStoryDirectorTaskInstruction(slot1.task);
+
 const prompt = `
 Du bist der Story Director eines langfristigen RPGs.
 
@@ -1007,6 +1018,10 @@ für ein mögliches zukünftiges Story-Event.
 ${formattedContext}
 
 === AUFGABE ===
+
+=== DRAMATURGISCHER FOKUS ===
+
+${slot1Instruction}
 
 Erzeuge EIN konkretes Story-Event, das sich natürlich aus der
 bisherigen Geschichte entwickeln kann.
