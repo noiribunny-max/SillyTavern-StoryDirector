@@ -1061,12 +1061,22 @@ const response =
         maxTokens
     );
 
+result.innerHTML = `
+    <div class="story-director-result-card">
+        <strong>🎲 Event-Vorschlag</strong>
+
+        <div class="story-director-result-text"></div>
+    </div>
+`;
+
 const textElement =
     result.querySelector('.story-director-result-text');
 
 if (textElement) {
     textElement.textContent = response;
 }
+
+
 
 console.log(
     '[Story Director] Event generated:',
