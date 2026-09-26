@@ -231,6 +231,41 @@ function findRelevantStoryDirectorLorebookEntries(
         .slice(0, limit);
 }
 
+async function getStoryDirectorRelevantLorebookContext(
+    chatLimit = 10,
+    loreLimit = 20
+) {
+    const storyContext =
+        getStoryDirectorChatContext(chatLimit);
+
+    const lorebook =
+        await getStoryDirectorBoundLorebookContext();
+
+    const searchText = storyContext
+        .map(message => message.text)
+        .join('\n');
+
+    const relevantEntries =
+        findRelevantStoryDirectorLorebookEntries(
+            lorebook,
+            searchText,
+            loreLimit
+        );
+
+    return {
+        lorebookName: lorebook.lorebookName,
+        searchText,
+        entries: relevantEntries,
+    };
+}
+
+window.testStoryDirectorRelevantLorebook = async () => {
+    return await getStoryDirectorRelevantLorebookContext(
+        10,
+        20
+    );
+};
+
 window.testStoryDirectorLorebookSearch = async () => {
     const lorebook =
         await getStoryDirectorBoundLorebookContext();
