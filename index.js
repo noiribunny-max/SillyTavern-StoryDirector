@@ -1093,14 +1093,9 @@ async function handleDirectorAction(action) {
      * Der erste echte Director-Test:
      * Nur "Event" verwendet bereits die KI.
      */
-    if (action === 'event') {
-        const tokenSelect =
-            document.getElementById('story-director-tokens-event');
-
-        const maxTokens =
-            Number(tokenSelect?.value) || 800;
-
-                if (storyDirectorState.eventGenerationInProgress) {
+    
+if (action === 'event') {
+    if (storyDirectorState.eventGenerationInProgress) {
         console.log(
             '[Story Director] Event generation already running.'
         );
@@ -1109,196 +1104,79 @@ async function handleDirectorAction(action) {
 
     storyDirectorState.eventGenerationInProgress = true;
 
-        result.innerHTML = `
-            <div class="story-director-placeholder">
-                <strong>🎲 Event wird generiert...</strong>
-
-                <p>
-                    🦉 Die Eule denkt nach...
-                </p>
-            </div>
-        `;
-
-        try {
-          
-            const storyContext = await getStoryDirectorContext({
-    chatLimit: 100,
-});
-
-async function generateStoryDirectorEvents() {
-    console.log(
-        '[Story Director] Generating all event slots...'
-    );
-
-    const slots =
-        getStoryDirectorSlotSettings();
-
-    if (!slots.length) {
-        throw new Error(
-            '[Story Director] Keine Event-Slots konfiguriert.'
-        );
-    }
-
-    const storyContext =
-        await getStoryDirectorContext({
-            chatLimit: 100,
-        });
-
-    const formattedContext =
-        formatStoryDirectorContextForPrompt(
-            storyContext
-        );
-
-    const results = [];
-
-    for (const slot of slots) {
-        const result =
-            await generateEventForSlot(
-                slot,
-                formattedContext
-            );
-
-        results.push(result);
-    }
-
-    console.log(
-        '[Story Director] All event slots generated:',
-        results
-    );
-
-    return results;
-}
-
-const formattedContext =
-    formatStoryDirectorContextForPrompt(storyContext);
-
-    const slotSettings = getStoryDirectorSlotSettings();
-
-const slot1 =
-    slotSettings.find(slot => slot.slot === 1) ?? {
-        slot: 1,
-        task: 'random',
-    };
-
-const slot1Instruction =
-    getStoryDirectorTaskInstruction(slot1.task);
-
-const prompt = `
-Du bist der Story Director eines langfristigen RPGs.
-
-Du entwickelst aus dem folgenden Story-Kontext EINE konkrete Idee
-für ein mögliches zukünftiges Story-Event.
-
-=== AKTUELLER STORY-KONTEXT ===
-
-${formattedContext}
-
-=== AUFGABE ===
-
-=== DRAMATURGISCHER FOKUS ===
-
-${slot1Instruction}
-
-Erzeuge EIN konkretes Story-Event, das sich natürlich aus der
-bisherigen Geschichte entwickeln kann.
-
-WICHTIGE REGELN:
-
-- Berücksichtige den bisherigen Chatverlauf und die aktuelle Situation.
-- Berücksichtige relevante Lorebook-Informationen.
-- Berücksichtige den Doom Tracker.
-- Baue möglichst auf bereits bestehenden Charakterbeziehungen,
-  offenen Situationen und Handlungsfäden auf.
-- Das Event soll eine konkrete neue Entwicklung oder ein konkretes
-  Geschehen darstellen.
-- Das Event darf neue Impulse einführen, soll aber zur bestehenden
-  Geschichte passen.
-- Schreibe KEINE Erklärung darüber, warum das Event zur Geschichte passt.
-- Schreibe KEINE Analyse deiner eigenen Überlegungen.
-- Schreibe KEINE möglichen weiteren Entwicklungen.
-- Schreibe KEINE Eskalationsstufen.
-- Schreibe KEINEN vollständigen Story-Arc.
-- Schreibe KEINE Liste mit mehreren möglichen Events.
-- Lege keine Entscheidung oder Reaktion für den Spieler endgültig fest.
-- Lass den Charakteren Raum, auf das Ereignis selbst zu reagieren.
-- Das Ergebnis soll als direkte Inspiration für die nächste RPG-Szene
-  verwendbar sein.
-- Schreibe auf Deutsch.
-- Sei konkret, aber schreibe keine fertige Szene.
-- Formuliere den Output als kompakten Regie-Vorschlag.
-- Beschreibe kurz und sachlich, welches Ereignis als Nächstes eintreten könnte.
-- Schreibe NICHT die Szene selbst aus.
-- Verwende keine ausführliche Atmosphäre oder Sinneseindrücke.
-- Schreibe keine Dialoge.
-- Schreibe keine inneren Monologe.
-- Erzähle nicht Schritt für Schritt, wie die Szene abläuft.
-- Der Vorschlag soll eine konkrete Idee liefern, die der Spieler anschließend
-  selbst in der RPG-Szene umsetzen kann.
-- Verwende einen passenden Titel für das Event.
-- Halte den Vorschlag bei ungefähr 80–150 Wörtern.
-- Schreibe maximal 2 kurze Absätze.
-- Vermeide unnötige Wiederholungen bereits geschehener Ereignisse.
-
-FORMAT:
-
-# Event-Titel
-
-[Konkrete Beschreibung des Ereignisses in 2–5 Absätzen.]
-`;
-
-const response =
-    await generateDirectorResponse(
-        prompt,
-        maxTokens
-    );
-
-result.innerHTML = `
-    <div class="story-director-result-card">
-        <strong>🎲 Event-Vorschlag</strong>
-
-        <div class="story-director-result-text"></div>
-    </div>
-`;
-
-const textElement =
-    result.querySelector('.story-director-result-text');
-
-if (textElement) {
-    textElement.textContent = response;
-}
-
-
-
-console.log(
-    '[Story Director] Event generated:',
-    response
-);
-
-storyDirectorState.eventGenerationInProgress = false;
-
-} catch (error) {
     result.innerHTML = `
         <div class="story-director-placeholder">
-            <strong>❌ Fehler bei der Generierung</strong>
+            <strong>🎲 Events werden generiert...</strong>
 
             <p>
-                Die Eule konnte keine Antwort bekommen.
+                🦉 Die Eule denkt nach...
             </p>
-
-            <small>
-                Sieh in der Browser-Konsole nach.
-            </small>
         </div>
     `;
 
-    console.error(
-        '[Story Director] Event generation failed:',
-        error
-    );
-}
-storyDirectorState.eventGenerationInProgress = false;
+    try {
+        const events =
+            await generateStoryDirectorEvents();
 
-return;
+        result.innerHTML = '';
+
+        events.forEach(event => {
+            const card =
+                document.createElement('div');
+
+            card.className =
+                'story-director-result-card';
+
+            const title =
+                document.createElement('strong');
+
+            title.textContent =
+                `🎲 ${event.label}`;
+
+            const text =
+                document.createElement('div');
+
+            text.className =
+                'story-director-result-text';
+
+            text.textContent =
+                event.response;
+
+            card.appendChild(title);
+            card.appendChild(text);
+
+            result.appendChild(card);
+        });
+
+        console.log(
+            '[Story Director] Event cards rendered:',
+            events
+        );
+
+    } catch (error) {
+        result.innerHTML = `
+            <div class="story-director-placeholder">
+                <strong>❌ Fehler bei der Generierung</strong>
+
+                <p>
+                    Die Eule konnte keine Events erzeugen.
+                </p>
+
+                <small>
+                    Sieh in der Browser-Konsole nach.
+                </small>
+            </div>
+        `;
+
+        console.error(
+            '[Story Director] Event generation failed:',
+            error
+        );
+    } finally {
+        storyDirectorState.eventGenerationInProgress = false;
+    }
+
+    return;
 }
 
 /*
