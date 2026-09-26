@@ -1,4 +1,4 @@
-const HUD_POSITION_KEY = 'story-director-hud-position';
+git add .Arrayconst HUD_POSITION_KEY = 'story-director-hud-position';
 
 const storyDirectorState = {
     suggestions: [],
@@ -110,6 +110,66 @@ function getStoryDirectorChatContext(limit = 30) {
         text: message.mes.trim(),
     }));
 }
+
+async function getStoryDirectorBoundLorebookContext() {
+    const context = SillyTavern.getContext();
+
+    const lorebookName =
+        context.chatMetadata?.world_info ?? null;
+
+    if (!lorebookName) {
+        return {
+            lorebookName: null,
+            entries: [],
+        };
+    }
+
+    const worldInfo =
+        await context.loadWorldInfo(lorebookName);
+
+    const entries = Object.values(
+        worldInfo?.entries ?? {}
+    )
+        .filter(entry =>
+            entry &&
+            typeof entry.content === 'string' &&
+            entry.content.trim()
+        )
+        .map(entry => ({
+            comment:
+                typeof entry.comment === 'string'
+                    ? entry.comment.trim()
+                    : '',
+
+            content:
+                entry.content.trim(),
+
+            key:
+                Array.isArray(entry.key)
+                    ? entry.key
+                    : [],
+
+            secondary:
+                Array.isArray(entry.secondary)
+                    ? entry.secondary
+                    : [],
+
+            constant:
+                Boolean(entry.constant),
+
+            order:
+                entry.order ?? 0,
+        }));
+
+    return {
+        lorebookName,
+        entries,
+    };
+}
+
+window.testStoryDirectorBoundLorebook = async () => {
+    return await getStoryDirectorBoundLorebookContext();
+};
 
 window.testStoryDirectorChatContext = () => {
     return getStoryDirectorChatContext(30);
