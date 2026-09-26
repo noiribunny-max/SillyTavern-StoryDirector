@@ -1,4 +1,4 @@
-git add .Arrayconst HUD_POSITION_KEY = 'story-director-hud-position';
+const HUD_POSITION_KEY = 'story-director-hud-position';
 
 const storyDirectorState = {
     suggestions: [],
