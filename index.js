@@ -1035,6 +1035,12 @@ FORMAT:
 [Konkrete Beschreibung des Ereignisses in 2–5 Absätzen.]
 `;
 
+const response =
+    await generateDirectorResponse(
+        prompt,
+        maxTokens
+    );
+    
 const textElement =
     result.querySelector('.story-director-result-text');
 
