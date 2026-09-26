@@ -1064,6 +1064,10 @@ window.testStoryDirectorEventSlot = async () => {
     return await generateEventForSlot(slot1);
 };
 
+window.testStoryDirectorAllEvents = async () => {
+    return await generateStoryDirectorEvents();
+};
+
 async function handleDirectorAction(action) {
     if (action === 'settings') {
         openSettings();
