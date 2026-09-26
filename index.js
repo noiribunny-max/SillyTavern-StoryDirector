@@ -1025,11 +1025,18 @@ WICHTIGE REGELN:
 - Schreibe auf Deutsch.
 - Sei konkret, aber schreibe keine fertige Szene.
 - Formuliere den Output als kompakten Regie-Vorschlag.
-- Beschreibe, was als Nächstes passieren könnte und wie es die
-  bestehende Geschichte weiterbewegt.
+- Beschreibe kurz und sachlich, welches Ereignis als Nächstes eintreten könnte.
+- Schreibe NICHT die Szene selbst aus.
+- Verwende keine ausführliche Atmosphäre oder Sinneseindrücke.
+- Schreibe keine Dialoge.
+- Schreibe keine inneren Monologe.
+- Erzähle nicht Schritt für Schritt, wie die Szene abläuft.
+- Der Vorschlag soll eine konkrete Idee liefern, die der Spieler anschließend
+  selbst in der RPG-Szene umsetzen kann.
 - Verwende einen passenden Titel für das Event.
-- Halte den Vorschlag kurz und fokussiert: ungefähr 1–3 kurze Absätze.
-- Schreibe keine Dialogszene und keine ausführliche Prosa.- Vermeide unnötige Wiederholungen bereits geschehener Ereignisse.
+- Halte den Vorschlag bei ungefähr 80–150 Wörtern.
+- Schreibe maximal 2 kurze Absätze.
+- Vermeide unnötige Wiederholungen bereits geschehener Ereignisse.
 
 FORMAT:
 
