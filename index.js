@@ -936,11 +936,10 @@ function restoreHudPosition(toggle, panel) {
     }
 }
 
-async function generateEventForSlot(slot) {
-    console.log(
-        '[Story Director] Generating event for slot:',
-        slot
-    );
+async function generateEventForSlot(
+    slot,
+    formattedContext = null
+) {
 
     const tokenSelect =
         document.getElementById(
@@ -955,15 +954,17 @@ async function generateEventForSlot(slot) {
             slot.task
         );
 
+    if (!formattedContext) {
     const storyContext =
         await getStoryDirectorContext({
             chatLimit: 100,
         });
 
-    const formattedContext =
+    formattedContext =
         formatStoryDirectorContextForPrompt(
             storyContext
         );
+}
 
     const prompt = `
 Du bist der Story Director eines langfristigen RPGs.
