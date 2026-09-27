@@ -1068,6 +1068,122 @@ window.testStoryDirectorAllEvents = async () => {
     return await generateStoryDirectorEvents();
 };
 
+async function generateTwistForSlot(
+    slot,
+    formattedContext = null
+) {
+    const tokenSelect =
+        document.getElementById(
+            'story-director-tokens-twist'
+        );
+
+    const maxTokens =
+        Number(tokenSelect?.value) || 1400;
+
+    const taskInstruction =
+        getStoryDirectorTaskInstruction(slot.task);
+
+    if (!formattedContext) {
+        const storyContext =
+            await getStoryDirectorContext({
+                chatLimit: 100,
+            });
+
+        formattedContext =
+            formatStoryDirectorContextForPrompt(
+                storyContext
+            );
+    }
+
+    const prompt = `
+Du bist der Story Director eines laufenden RPGs.
+
+Deine Aufgabe ist es, eine einzelne mögliche TWIST-Idee
+für die nächste Entwicklung der Geschichte zu entwerfen.
+
+=== AKTUELLER STORY-KONTEXT ===
+
+${formattedContext}
+
+=== GEWÜNSCHTE DRAMATURGISCHE RICHTUNG ===
+
+${taskInstruction}
+
+=== REGELN FÜR DEN TWIST ===
+
+- Der Twist muss sich aus dem bisherigen Storyverlauf ergeben.
+- Er soll überraschend sein, aber rückblickend nachvollziehbar bleiben.
+- Nutze vorhandene Charaktere, Beziehungen, offene Situationen,
+  Hinweise und Storyfäden.
+- Bevorzuge bereits vorhandene Informationen gegenüber neu erfundenen Fakten.
+- Erfinde keine wichtigen Hintergrundinformationen über Charaktere,
+  wenn dafür keine Grundlage im vorhandenen Kontext existiert.
+- Der Twist darf bestehende Lorebook-Fakten NICHT widersprechen.
+- Der Twist soll die Geschichte tatsächlich verändern oder
+  eine bestehende Situation in ein neues Licht rücken.
+- Vermeide einen Twist, der lediglich ein normales neues Ereignis darstellt.
+- Lege keine endgültige Reaktion des Spielers fest.
+- Schreibe keine vollständige Szene.
+- Schreibe keine Dialoge.
+- Schreibe keine Analyse deiner eigenen Überlegungen.
+- Schreibe keine Liste mehrerer Twists.
+- Schreibe auf Deutsch.
+- Formuliere einen konkreten Regie-Vorschlag.
+- Halte den Vorschlag ungefähr bei 80–150 Wörtern.
+- Schreibe maximal 2 kurze Absätze.
+
+WICHTIG:
+
+Die gewählte dramaturgische Richtung bestimmt die ART des Twists.
+Sie ist kein Stichwort, das einfach wörtlich in den Twist eingebaut
+werden muss.
+
+Der Twist soll zur aktuellen Geschichte passen und nicht künstlich
+wirken.
+
+FORMAT:
+
+# Twist-Titel
+
+[Konkrete Beschreibung der überraschenden Wendung.]
+`;
+
+    const response =
+        await generateDirectorResponse(
+            prompt,
+            maxTokens
+        );
+
+    console.log(
+        '[Story Director] Twist slot generated:',
+        {
+            slot: slot.slot,
+            task: slot.task,
+            response,
+        }
+    );
+
+    return {
+        slot: slot.slot,
+        task: slot.task,
+        label: getStoryDirectorTaskLabel(slot.task),
+        response,
+    };
+}
+
+window.testStoryDirectorTwistSlot = async () => {
+    const slots =
+        getStoryDirectorSlotSettings();
+
+    const slot1 =
+        slots.find(slot => slot.slot === 1) ?? {
+            slot: 1,
+            task: 'random',
+        };
+
+    return await generateTwistForSlot(slot1);
+};
+
 async function generateStoryDirectorEvents() {
     console.log(
         '[Story Director] Generating all event slots...'
