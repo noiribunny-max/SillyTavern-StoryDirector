@@ -6,6 +6,7 @@ const storyDirectorState = {
     activeInstruction: null,
     eventGenerationInProgress: false,
     timeSkipSelection: null,
+    timeSkipYearMode: 'real',
 };
 
 async function generateDirectorResponse(prompt, maxTokens) {
@@ -572,22 +573,41 @@ function createStoryDirectorPanel() {
                 </div>
 
                 <div id="story-director-timeskip-date-fields">
+                    <label class="story-director-setting-label" for="story-director-timeskip-year-mode">
+                        Jahresformat
+                    </label>
+                    <select
+                        id="story-director-timeskip-year-mode"
+                        class="story-director-select"
+                    >
+                        <option value="real">Echtes Jahr (2026)</option>
+                        <option value="fictional">Fiktives Jahr (XX26)</option>
+                    </select>
+
+                    <div class="story-director-timeskip-date-hint">
+                        Beim fiktiven Format kannst du z. B. <strong>14.05.XX12</strong> eingeben.
+                    </div>
+
                     <label class="story-director-setting-label" for="story-director-timeskip-start">
                         Von
                     </label>
                     <input
-                        type="date"
+                        type="text"
                         id="story-director-timeskip-start"
                         class="story-director-input"
+                        placeholder="14.05.2026"
+                        inputmode="numeric"
                     >
 
                     <label class="story-director-setting-label" for="story-director-timeskip-end">
                         Bis
                     </label>
                     <input
-                        type="date"
+                        type="text"
                         id="story-director-timeskip-end"
                         class="story-director-input"
+                        placeholder="20.10.2026"
+                        inputmode="numeric"
                     >
                 </div>
 
@@ -832,7 +852,7 @@ function createStoryDirectorPanel() {
 
 
 
-    panel.querySelectorAll('.story-director-button').forEach(button => {
+    panel.querySelectorAll('.story-director-button[data-action]').forEach(button => {
         button.addEventListener('click', () => {
             handleDirectorAction(button.dataset.action);
         });
@@ -853,6 +873,41 @@ function setupTimeSkipSettings(panel) {
     const modeInputs = settings.querySelectorAll(
         'input[name="story-director-timeskip-mode"]'
     );
+
+    const yearMode = settings.querySelector(
+        '#story-director-timeskip-year-mode'
+    );
+
+    const startInput = settings.querySelector(
+        '#story-director-timeskip-start'
+    );
+
+    const endInput = settings.querySelector(
+        '#story-director-timeskip-end'
+    );
+
+    const updateYearMode = () => {
+        const fictional = yearMode?.value === 'fictional';
+
+        if (startInput) {
+            startInput.placeholder = fictional
+                ? '14.05.XX12'
+                : '14.05.2026';
+        }
+
+        if (endInput) {
+            endInput.placeholder = fictional
+                ? '20.10.XX12'
+                : '20.10.2026';
+        }
+
+        storyDirectorState.timeSkipYearMode =
+            fictional ? 'fictional' : 'real';
+    };
+
+    if (yearMode) {
+        yearMode.addEventListener('change', updateYearMode);
+    }
 
     const dateFields = settings.querySelector(
         '#story-director-timeskip-date-fields'
@@ -930,50 +985,82 @@ function setupTimeSkipSettings(panel) {
     }
 
     updateMode();
+    updateYearMode();
 }
 
 function getStoryDirectorTimeSkipSelection(settings, mode) {
     if (mode === 'date') {
-        const startValue = settings.querySelector(
+        const startText = settings.querySelector(
             '#story-director-timeskip-start'
-        )?.value;
+        )?.value?.trim();
 
-        const endValue = settings.querySelector(
+        const endText = settings.querySelector(
             '#story-director-timeskip-end'
-        )?.value;
+        )?.value?.trim();
 
-        if (!startValue || !endValue) {
+        const yearMode =
+            settings.querySelector(
+                '#story-director-timeskip-year-mode'
+            )?.value === 'fictional'
+                ? 'fictional'
+                : 'real';
+
+        if (!startText || !endText) {
             throw new Error(
-                'Bitte Start- und Enddatum auswählen.'
+                'Bitte Start- und Enddatum eingeben.'
             );
         }
 
-        const start = new Date(`${startValue}T00:00:00`);
-        const end = new Date(`${endValue}T00:00:00`);
+        const start = parseStoryDirectorDateText(
+            startText,
+            yearMode
+        );
 
-        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        const end = parseStoryDirectorDateText(
+            endText,
+            yearMode
+        );
+
+        if (!start || !end) {
             throw new Error(
-                'Das eingegebene Datum ist ungültig.'
+                yearMode === 'fictional'
+                    ? 'Bitte ein gültiges Datum wie 14.05.XX12 eingeben.'
+                    : 'Bitte ein gültiges Datum wie 14.05.2026 eingeben.'
             );
         }
 
-        if (end <= start) {
+        if (end.date <= start.date) {
             throw new Error(
                 'Das Enddatum muss nach dem Startdatum liegen.'
             );
         }
 
         const days = Math.round(
-            (end.getTime() - start.getTime()) /
+            (end.date.getTime() - start.date.getTime()) /
             (1000 * 60 * 60 * 24)
         );
 
         return {
             mode: 'date',
-            startDate: startValue,
-            endDate: endValue,
+            yearMode,
+            startDate: formatStoryDirectorDateInput(
+                start.date,
+                yearMode
+            ),
+            endDate: formatStoryDirectorDateInput(
+                end.date,
+                yearMode
+            ),
+            startDisplay: formatStoryDirectorDisplayDate(
+                start.date,
+                yearMode
+            ),
+            endDisplay: formatStoryDirectorDisplayDate(
+                end.date,
+                yearMode
+            ),
             days,
-            label: `${formatStoryDirectorDate(startValue)} → ${formatStoryDirectorDate(endValue)} (${days} Tage)`,
+            label: `${formatStoryDirectorDisplayDate(start.date, yearMode)} → ${formatStoryDirectorDisplayDate(end.date, yearMode)} (${days} Tage)`,
         };
     }
 
@@ -1007,25 +1094,32 @@ function getStoryDirectorTimeSkipSelection(settings, mode) {
             );
         }
 
-        const startDate = getStoryDirectorCurrentStoryDate();
+        const storyDate = getStoryDirectorCurrentStoryDate();
 
-        if (!startDate) {
+        if (!storyDate) {
             throw new Error(
                 'Ich konnte kein eindeutiges Story-Datum finden. Bitte nutze einmal „Konkretes Datum“, damit der Zeitsprung einen festen Ausgangspunkt hat.'
             );
         }
 
         const endDate = addStoryDirectorDuration(
-            startDate,
+            storyDate.date,
             amount,
             unit
         );
 
-        const startValue = formatStoryDirectorDateInput(startDate);
-        const endValue = formatStoryDirectorDateInput(endDate);
+        const yearMode = storyDate.yearMode;
+        const startValue = formatStoryDirectorDateInput(
+            storyDate.date,
+            yearMode
+        );
+        const endValue = formatStoryDirectorDateInput(
+            endDate,
+            yearMode
+        );
 
         const days = Math.round(
-            (endDate.getTime() - startDate.getTime()) /
+            (endDate.getTime() - storyDate.date.getTime()) /
             (1000 * 60 * 60 * 24)
         );
 
@@ -1033,10 +1127,19 @@ function getStoryDirectorTimeSkipSelection(settings, mode) {
             mode: 'duration',
             amount,
             unit,
+            yearMode,
             startDate: startValue,
             endDate: endValue,
+            startDisplay: formatStoryDirectorDisplayDate(
+                storyDate.date,
+                yearMode
+            ),
+            endDisplay: formatStoryDirectorDisplayDate(
+                endDate,
+                yearMode
+            ),
             days,
-            label: `${amount} ${unitLabels[unit]} → ${formatStoryDirectorDate(startValue)} → ${formatStoryDirectorDate(endValue)}`,
+            label: `${amount} ${unitLabels[unit]} → ${formatStoryDirectorDisplayDate(storyDate.date, yearMode)} → ${formatStoryDirectorDisplayDate(endDate, yearMode)}`,
         };
     }
 
@@ -1045,20 +1148,105 @@ function getStoryDirectorTimeSkipSelection(settings, mode) {
     );
 }
 
-function formatStoryDirectorDate(value) {
-    const [year, month, day] = value
-        .split('-')
-        .map(Number);
+function parseStoryDirectorDateText(value, yearMode = 'real') {
+    const text = String(value ?? '').trim();
 
-    return `${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
+    let match = text.match(
+        /^(\d{1,2})\.(\d{1,2})\.(XX)?(\d{1,6})$/i
+    );
+
+    if (!match) {
+        match = text.match(
+            /^(\d{4,6})-(\d{1,2})-(\d{1,2})$/
+        );
+
+        if (match) {
+            const year = Number(match[1]);
+            const month = Number(match[2]);
+            const day = Number(match[3]);
+            const date = createValidStoryDirectorDate(
+                year,
+                month,
+                day
+            );
+
+            return date
+                ? {
+                    date,
+                    yearMode: yearMode === 'fictional'
+                        ? 'fictional'
+                        : 'real',
+                }
+                : null;
+        }
+
+        return null;
+    }
+
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const hasXX = Boolean(match[3]);
+    const year = Number(match[4]);
+
+    if (yearMode === 'fictional' && !hasXX) {
+        // Im fiktiven Modus akzeptieren wir auch 14.05.12
+        // und behandeln die Jahreszahl als reine Story-Jahreszahl.
+    }
+
+    if (yearMode === 'real' && hasXX) {
+        return null;
+    }
+
+    const date = createValidStoryDirectorDate(
+        year,
+        month,
+        day
+    );
+
+    return date
+        ? {
+            date,
+            yearMode: hasXX || yearMode === 'fictional'
+                ? 'fictional'
+                : 'real',
+        }
+        : null;
 }
 
-function formatStoryDirectorDateInput(date) {
+function formatStoryDirectorDate(value) {
+    const parsed = parseStoryDirectorDateText(
+        value,
+        'real'
+    );
+
+    if (!parsed) {
+        return String(value);
+    }
+
+    return formatStoryDirectorDisplayDate(
+        parsed.date,
+        parsed.yearMode
+    );
+}
+
+function formatStoryDirectorDisplayDate(date, yearMode = 'real') {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+
+    return yearMode === 'fictional'
+        ? `${day}.${month}.XX${String(year).padStart(2, '0')}`
+        : `${day}.${month}.${year}`;
+}
+
+function formatStoryDirectorDateInput(date, yearMode = 'real') {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
 
-    return `${year}-${month}-${day}`;
+    return yearMode === 'fictional'
+        ? `XX${String(year).padStart(2, '0')}-${month}-${day}`
+        : `${String(year).padStart(4, '0')}-${month}-${day}`;
 }
 
 function addStoryDirectorDuration(startDate, amount, unit) {
@@ -1078,11 +1266,13 @@ function addStoryDirectorDuration(startDate, amount, unit) {
         const originalDay = result.getDate();
         result.setDate(1);
         result.setMonth(result.getMonth() + amount);
+
         const lastDay = new Date(
             result.getFullYear(),
             result.getMonth() + 1,
             0
         ).getDate();
+
         result.setDate(Math.min(originalDay, lastDay));
         return result;
     }
@@ -1090,14 +1280,19 @@ function addStoryDirectorDuration(startDate, amount, unit) {
     if (unit === 'years') {
         const originalMonth = result.getMonth();
         const originalDay = result.getDate();
+
         result.setDate(1);
-        result.setFullYear(result.getFullYear() + amount);
+        result.setFullYear(
+            result.getFullYear() + amount
+        );
         result.setMonth(originalMonth);
+
         const lastDay = new Date(
             result.getFullYear(),
             originalMonth + 1,
             0
         ).getDate();
+
         result.setDate(Math.min(originalDay, lastDay));
         return result;
     }
@@ -1121,8 +1316,52 @@ function getStoryDirectorCurrentStoryDate() {
 
     const matches = [];
 
-    const isoPattern = /\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/g;
+    const fictionalGermanPattern =
+        /\b(\d{1,2})\.(\d{1,2})\.XX(\d{1,6})\b/gi;
+
     let match;
+
+    while (
+        (match = fictionalGermanPattern.exec(recentText)) !== null
+    ) {
+        const date = createValidStoryDirectorDate(
+            Number(match[3]),
+            Number(match[2]),
+            Number(match[1])
+        );
+
+        if (date) {
+            matches.push({
+                index: match.index,
+                date,
+                yearMode: 'fictional',
+            });
+        }
+    }
+
+    const fictionalIsoPattern =
+        /\bXX(\d{1,6})-(\d{1,2})-(\d{1,2})\b/gi;
+
+    while (
+        (match = fictionalIsoPattern.exec(recentText)) !== null
+    ) {
+        const date = createValidStoryDirectorDate(
+            Number(match[1]),
+            Number(match[2]),
+            Number(match[3])
+        );
+
+        if (date) {
+            matches.push({
+                index: match.index,
+                date,
+                yearMode: 'fictional',
+            });
+        }
+    }
+
+    const isoPattern =
+        /\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/g;
 
     while ((match = isoPattern.exec(recentText)) !== null) {
         const date = createValidStoryDirectorDate(
@@ -1135,11 +1374,13 @@ function getStoryDirectorCurrentStoryDate() {
             matches.push({
                 index: match.index,
                 date,
+                yearMode: 'real',
             });
         }
     }
 
-    const germanPattern = /\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b/g;
+    const germanPattern =
+        /\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b/g;
 
     while ((match = germanPattern.exec(recentText)) !== null) {
         const date = createValidStoryDirectorDate(
@@ -1152,6 +1393,7 @@ function getStoryDirectorCurrentStoryDate() {
             matches.push({
                 index: match.index,
                 date,
+                yearMode: 'real',
             });
         }
     }
@@ -1159,12 +1401,14 @@ function getStoryDirectorCurrentStoryDate() {
     matches.sort((a, b) => a.index - b.index);
 
     return matches.length
-        ? matches[matches.length - 1].date
+        ? matches[matches.length - 1]
         : null;
 }
 
 function createValidStoryDirectorDate(year, month, day) {
-    const date = new Date(year, month - 1, day);
+    const date = new Date(0);
+    date.setHours(0, 0, 0, 0);
+    date.setFullYear(year, month - 1, day);
 
     if (
         date.getFullYear() !== year ||
