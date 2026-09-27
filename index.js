@@ -1509,6 +1509,217 @@ result.innerHTML = `
     return;
 }
 
+if (action === 'twist') {
+    if (storyDirectorState.twistGenerationInProgress) {
+        console.log(
+            '[Story Director] Twist generation already running.'
+        );
+        return;
+    }
+
+    storyDirectorState.twistGenerationInProgress = true;
+
+    result.innerHTML = `
+        <div class="story-director-placeholder">
+            <strong>🌀 Twists werden generiert...</strong>
+
+            <p>
+                🦉 Die Eule denkt nach...
+            </p>
+        </div>
+    `;
+
+    try {
+        const twists =
+            await generateStoryDirectorTwists();
+
+        result.innerHTML = '';
+
+        twists.forEach(twist => {
+            const card =
+                document.createElement('div');
+
+            card.className =
+                'story-director-result-card';
+
+            const title =
+                document.createElement('strong');
+
+            title.textContent =
+                `🌀 ${twist.label}`;
+
+            const text =
+                document.createElement('div');
+
+            text.className =
+                'story-director-result-text';
+
+            text.textContent =
+                twist.response;
+
+            const actions =
+                document.createElement('div');
+
+            actions.className =
+                'story-director-result-actions';
+
+            const editButton =
+                document.createElement('button');
+
+            editButton.className =
+                'story-director-button story-director-edit-button';
+
+            editButton.type = 'button';
+            editButton.textContent = '✏️ Bearbeiten';
+
+            editButton.addEventListener('click', () => {
+                const textarea =
+                    document.createElement('textarea');
+
+                textarea.className =
+                    'story-director-edit-textarea';
+
+                textarea.value =
+                    twist.response;
+
+                textarea.rows = 8;
+
+                text.replaceWith(textarea);
+
+                editButton.textContent =
+                    '💾 Speichern';
+
+                editButton.classList.add(
+                    'story-director-save-button'
+                );
+
+                editButton.onclick = () => {
+                    twist.response =
+                        textarea.value;
+
+                    textarea.replaceWith(text);
+
+                    text.textContent =
+                        twist.response;
+
+                    editButton.textContent =
+                        '✏️ Bearbeiten';
+
+                    editButton.classList.remove(
+                        'story-director-save-button'
+                    );
+
+                    editButton.onclick = null;
+                };
+            });
+
+            const acceptButton =
+                document.createElement('button');
+
+            acceptButton.className =
+                'story-director-button story-director-accept-button';
+
+            acceptButton.type = 'button';
+            acceptButton.textContent = '✓ Übernehmen';
+
+            acceptButton.addEventListener('click', async () => {
+                const suggestion =
+                    twist.response.trim();
+
+                if (!suggestion) {
+                    console.warn(
+                        '[Story Director] Cannot accept empty twist.'
+                    );
+                    return;
+                }
+
+                try {
+                    acceptButton.disabled = true;
+                    acceptButton.textContent =
+                        '⏳ Wird übernommen...';
+
+                    const context =
+                        SillyTavern.getContext();
+
+                    await context.generate(
+                        `Nutze den folgenden Story-Director-Twist als konkrete Vorgabe für die nächste RPG-Szene.
+
+WICHTIG:
+- Setze die Wendung in der nächsten Antwort erzählerisch um.
+- Behalte alle bestehenden Charaktereigenschaften, Namen, Beziehungen und Lorebook-Fakten bei.
+- Der Twist darf bestehende Fakten nicht überschreiben.
+- Schreibe die normale RPG-Szene direkt weiter.
+- Erkläre nicht, dass ein Story-Director-Twist verwendet wurde.
+
+STORY-DIRECTOR-TWIST:
+${suggestion}`,
+                        false
+                    );
+
+                    result.innerHTML = `
+                        <div class="story-director-placeholder">
+                            <strong>🦉 Story Director bereit</strong>
+
+                            <p>
+                                Wähle eine Aktion, um neue Story-Ideen zu erhalten.
+                            </p>
+                        </div>
+                    `;
+
+                } catch (error) {
+                    console.error(
+                        '[Story Director] Twist accept generation failed:',
+                        error
+                    );
+
+                    acceptButton.disabled = false;
+                    acceptButton.textContent =
+                        '✓ Übernehmen';
+                }
+            });
+
+            actions.appendChild(editButton);
+            actions.appendChild(acceptButton);
+
+            card.appendChild(title);
+            card.appendChild(text);
+            card.appendChild(actions);
+
+            result.appendChild(card);
+        });
+
+        console.log(
+            '[Story Director] Twist cards rendered:',
+            twists
+        );
+
+    } catch (error) {
+        result.innerHTML = `
+            <div class="story-director-placeholder">
+                <strong>❌ Fehler bei der Generierung</strong>
+
+                <p>
+                    Die Eule konnte keine Twists erzeugen.
+                </p>
+
+                <small>
+                    Sieh in der Browser-Konsole nach.
+                </small>
+            </div>
+        `;
+
+        console.error(
+            '[Story Director] Twist generation failed:',
+            error
+        );
+
+    } finally {
+        storyDirectorState.twistGenerationInProgress = false;
+    }
+
+    return;
+}
+
 /*
  * Die anderen Funktionen bleiben vorerst Platzhalter.
  */
