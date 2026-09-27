@@ -639,6 +639,26 @@ function createStoryDirectorPanel() {
                     </select>
                 </div>
 
+                <label
+                    class="story-director-setting-label"
+                    for="story-director-timeskip-notes"
+                >
+                    📌 Zusätzliche Vorgaben
+                </label>
+
+                <textarea
+                    id="story-director-timeskip-notes"
+                    class="story-director-edit-textarea story-director-timeskip-notes"
+                    rows="4"
+                    placeholder="Was muss während oder am Ende des Zeitsprungs unbedingt berücksichtigt werden?
+
+Beispiel: Mitsuki ist nach dem Skip noch nicht von ihrer Reise zurück."
+                ></textarea>
+
+                <div class="story-director-timeskip-date-hint">
+                    Diese Vorgaben werden als feste Rahmenbedingungen behandelt und dürfen nicht einfach überschrieben werden.
+                </div>
+
                 <button
                     type="button"
                     class="story-director-button"
@@ -966,7 +986,14 @@ function setupTimeSkipSettings(panel) {
                 const selection =
                     getStoryDirectorTimeSkipSelection(settings, mode);
 
-                storyDirectorState.timeSkipSelection = selection;
+                const notes = settings.querySelector(
+                    '#story-director-timeskip-notes'
+                )?.value?.trim() || '';
+
+                storyDirectorState.timeSkipSelection = {
+                    ...selection,
+                    notes,
+                };
 
                 if (status) {
                     status.style.display = 'block';
@@ -1989,6 +2016,11 @@ async function generateStoryDirectorTimeSkip(selection = null) {
             ? 'Das verwendete Jahr ist fiktiv. Behandle XX-Jahreszahlen ausschließlich als Story-Zeitrechnung und wandle sie niemals in reale Jahreszahlen um.'
             : 'Verwende die angegebenen realen Jahreszahlen unverändert.';
 
+    const userConstraints =
+        chosenSelection.notes?.trim()
+            ? chosenSelection.notes.trim()
+            : '(Keine zusätzlichen Vorgaben.)';
+
     const prompt = `
 Du bist der Story Director eines langfristigen RPGs.
 
@@ -2004,6 +2036,16 @@ ${yearWarning}
 
 ${formattedContext}
 
+=== ZUSÄTZLICHE VORGABEN DES SPIELERS ===
+
+${userConstraints}
+
+Diese Vorgaben sind verbindliche Rahmenbedingungen für den Zeitsprung.
+- Berücksichtige sie ausdrücklich.
+- Überschreibe oder ignoriere sie nicht.
+- Wenn eine Vorgabe den aktuellen Story-Fakten widerspricht, behandle die bestehende Lore als maßgeblich und vermeide den Widerspruch, statt die Lore eigenmächtig umzuschreiben.
+- Eine Vorgabe wie „Mitsuki ist noch nicht von ihrer Reise zurück“ bedeutet beispielsweise, dass Mitsuki am Ende des Zeitsprungs nicht wieder anwesend sein darf, sofern nichts im Story-Kontext eindeutig das Gegenteil festlegt.
+
 === AUFGABE ===
 
 Erstelle eine kompakte Zusammenfassung dessen, was WÄHREND dieses gesamten Zeitraums passiert sein könnte bzw. passiert ist.
@@ -2018,6 +2060,8 @@ WICHTIGE REGELN:
 - Wenn der Kontext keine konkrete Entwicklung für einen Bereich hergibt, darfst du eine kleine plausible Entwicklung ergänzen, aber keine großen neuen Fakten, Figuren oder Wendungen ohne Grundlage erfinden.
 - Große Veränderungen sollen nachvollziehbar aus dem bisherigen Verlauf entstehen.
 - Lass wichtige Spielerentscheidungen offen, wenn sie aus dem Kontext nicht feststehen.
+- Zusätzliche Vorgaben des Spielers sind keine bloßen Ideen oder Vorschläge, sondern feste Rahmenbedingungen für diesen Zeitsprung.
+- Erfinde keine Entwicklung, die eine solche Vorgabe heimlich rückgängig macht.
 - Beende den Zeitraum mit dem neuen erzählerischen Status der Geschichte.
 - Bei sehr langen Zeiträumen darfst du Entwicklungen zeitlich bündeln, statt viele einzelne Ereignisse aufzuzählen.
 - Schreibe auf Deutsch.
@@ -2687,9 +2731,13 @@ WICHTIG:
 - Behalte alle bestehenden Charaktereigenschaften, Namen, Beziehungen und Lorebook-Fakten bei.
 - Überschreibe keine bestehenden Fakten.
 - Beginne die nächste normale RPG-Szene am Ende des angegebenen Zeitsprungs.
+- Beachte auch die zusätzlichen Vorgaben des Spielers, die für diesen Zeitsprung festgelegt wurden.
 - Erzähle nicht noch einmal den gesamten Zeitsprung nach.
 - Zeige stattdessen die aktuelle Situation und schreibe die RPG-Szene normal weiter.
 - Erkläre nicht, dass ein Story Director verwendet wurde.
+
+ZUSÄTZLICHE VORGABEN DES SPIELERS:
+${chosenSelection.notes?.trim() || '(Keine zusätzlichen Vorgaben.)'}
 
 STORY-DIRECTOR-ZEITSPRUNG:
 ${summary}`,
