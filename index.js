@@ -1221,6 +1221,26 @@ events.forEach(event => {
     editButton.classList.add(
         'story-director-save-button'
     );
+
+    editButton.onclick = () => {
+    event.response =
+        textarea.value;
+
+    textarea.replaceWith(text);
+
+    text.textContent =
+        event.response;
+
+    editButton.textContent =
+        '✏️ Bearbeiten';
+
+    editButton.classList.remove(
+        'story-director-save-button'
+    );
+
+    editButton.onclick = null;
+};
+
 });
 
     const acceptButton =
