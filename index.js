@@ -5,6 +5,7 @@ const storyDirectorState = {
     activeSuggestion: null,
     activeInstruction: null,
     eventGenerationInProgress: false,
+    timeSkipSelection: null,
 };
 
 async function generateDirectorResponse(prompt, maxTokens) {
@@ -544,6 +545,94 @@ function createStoryDirectorPanel() {
                 ⏩ Time Skip
             </button>
 
+            <div class="story-director-timeskip-settings" id="story-director-timeskip-settings" style="display:none;">
+                <div class="story-director-section-title">
+                    ⏩ Zeitsprung festlegen
+                </div>
+
+                <div class="story-director-timeskip-mode">
+                    <label class="story-director-radio-label">
+                        <input
+                            type="radio"
+                            name="story-director-timeskip-mode"
+                            value="date"
+                            checked
+                        >
+                        🗓️ Konkretes Datum
+                    </label>
+
+                    <label class="story-director-radio-label">
+                        <input
+                            type="radio"
+                            name="story-director-timeskip-mode"
+                            value="duration"
+                        >
+                        ⏩ Dauer
+                    </label>
+                </div>
+
+                <div id="story-director-timeskip-date-fields">
+                    <label class="story-director-setting-label" for="story-director-timeskip-start">
+                        Von
+                    </label>
+                    <input
+                        type="date"
+                        id="story-director-timeskip-start"
+                        class="story-director-input"
+                    >
+
+                    <label class="story-director-setting-label" for="story-director-timeskip-end">
+                        Bis
+                    </label>
+                    <input
+                        type="date"
+                        id="story-director-timeskip-end"
+                        class="story-director-input"
+                    >
+                </div>
+
+                <div id="story-director-timeskip-duration-fields" style="display:none;">
+                    <label class="story-director-setting-label" for="story-director-timeskip-number">
+                        Anzahl
+                    </label>
+                    <input
+                        type="number"
+                        id="story-director-timeskip-number"
+                        class="story-director-input"
+                        min="1"
+                        step="1"
+                        value="1"
+                    >
+
+                    <label class="story-director-setting-label" for="story-director-timeskip-unit">
+                        Einheit
+                    </label>
+                    <select
+                        id="story-director-timeskip-unit"
+                        class="story-director-select"
+                    >
+                        <option value="days">Tage</option>
+                        <option value="weeks">Wochen</option>
+                        <option value="months">Monate</option>
+                        <option value="years">Jahre</option>
+                    </select>
+                </div>
+
+                <button
+                    type="button"
+                    class="story-director-button"
+                    id="story-director-timeskip-continue"
+                >
+                    ✓ Zeitraum übernehmen
+                </button>
+
+                <div
+                    id="story-director-timeskip-status"
+                    class="story-director-timeskip-status"
+                    style="display:none;"
+                ></div>
+            </div>
+
             <button class="story-director-button" data-action="unstuck">
                 🆘 Story festgefahren?
             </button>
@@ -739,8 +828,8 @@ function createStoryDirectorPanel() {
     setupDragging(toggle, panel);
     setupSettingsBackButton(panel);
     setupSuggestionSettings(panel);
+    setupTimeSkipSettings(panel);
 
-    
 
 
     panel.querySelectorAll('.story-director-button').forEach(button => {
@@ -750,6 +839,343 @@ function createStoryDirectorPanel() {
     });
 
     console.log('[Story Director] UI created!');
+}
+
+function setupTimeSkipSettings(panel) {
+    const settings = panel.querySelector(
+        '#story-director-timeskip-settings'
+    );
+
+    if (!settings) {
+        return;
+    }
+
+    const modeInputs = settings.querySelectorAll(
+        'input[name="story-director-timeskip-mode"]'
+    );
+
+    const dateFields = settings.querySelector(
+        '#story-director-timeskip-date-fields'
+    );
+
+    const durationFields = settings.querySelector(
+        '#story-director-timeskip-duration-fields'
+    );
+
+    const updateMode = () => {
+        const mode = settings.querySelector(
+            'input[name="story-director-timeskip-mode"]:checked'
+        )?.value;
+
+        const isDateMode = mode === 'date';
+
+        if (dateFields) {
+            dateFields.style.display =
+                isDateMode ? 'block' : 'none';
+        }
+
+        if (durationFields) {
+            durationFields.style.display =
+                isDateMode ? 'none' : 'block';
+        }
+    };
+
+    modeInputs.forEach(input => {
+        input.addEventListener('change', updateMode);
+    });
+
+    const continueButton = settings.querySelector(
+        '#story-director-timeskip-continue'
+    );
+
+    const status = settings.querySelector(
+        '#story-director-timeskip-status'
+    );
+
+    if (continueButton) {
+        continueButton.addEventListener('click', () => {
+            const mode = settings.querySelector(
+                'input[name="story-director-timeskip-mode"]:checked'
+            )?.value;
+
+            try {
+                const selection =
+                    getStoryDirectorTimeSkipSelection(settings, mode);
+
+                storyDirectorState.timeSkipSelection = selection;
+
+                if (status) {
+                    status.style.display = 'block';
+                    status.textContent =
+                        `✓ ${selection.label}`;
+                }
+
+                console.log(
+                    '[Story Director] Time Skip selection:',
+                    selection
+                );
+            } catch (error) {
+                if (status) {
+                    status.style.display = 'block';
+                    status.textContent =
+                        `⚠️ ${error.message}`;
+                }
+
+                console.warn(
+                    '[Story Director] Time Skip selection invalid:',
+                    error
+                );
+            }
+        });
+    }
+
+    updateMode();
+}
+
+function getStoryDirectorTimeSkipSelection(settings, mode) {
+    if (mode === 'date') {
+        const startValue = settings.querySelector(
+            '#story-director-timeskip-start'
+        )?.value;
+
+        const endValue = settings.querySelector(
+            '#story-director-timeskip-end'
+        )?.value;
+
+        if (!startValue || !endValue) {
+            throw new Error(
+                'Bitte Start- und Enddatum auswählen.'
+            );
+        }
+
+        const start = new Date(`${startValue}T00:00:00`);
+        const end = new Date(`${endValue}T00:00:00`);
+
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            throw new Error(
+                'Das eingegebene Datum ist ungültig.'
+            );
+        }
+
+        if (end <= start) {
+            throw new Error(
+                'Das Enddatum muss nach dem Startdatum liegen.'
+            );
+        }
+
+        const days = Math.round(
+            (end.getTime() - start.getTime()) /
+            (1000 * 60 * 60 * 24)
+        );
+
+        return {
+            mode: 'date',
+            startDate: startValue,
+            endDate: endValue,
+            days,
+            label: `${formatStoryDirectorDate(startValue)} → ${formatStoryDirectorDate(endValue)} (${days} Tage)`,
+        };
+    }
+
+    if (mode === 'duration') {
+        const numberValue = settings.querySelector(
+            '#story-director-timeskip-number'
+        )?.value;
+
+        const unit = settings.querySelector(
+            '#story-director-timeskip-unit'
+        )?.value;
+
+        const amount = Number(numberValue);
+
+        if (!Number.isInteger(amount) || amount < 1) {
+            throw new Error(
+                'Bitte eine ganze Zahl größer als 0 eingeben.'
+            );
+        }
+
+        const unitLabels = {
+            days: amount === 1 ? 'Tag' : 'Tage',
+            weeks: amount === 1 ? 'Woche' : 'Wochen',
+            months: amount === 1 ? 'Monat' : 'Monate',
+            years: amount === 1 ? 'Jahr' : 'Jahre',
+        };
+
+        if (!unit || !unitLabels[unit]) {
+            throw new Error(
+                'Bitte eine gültige Zeiteinheit auswählen.'
+            );
+        }
+
+        const startDate = getStoryDirectorCurrentStoryDate();
+
+        if (!startDate) {
+            throw new Error(
+                'Ich konnte kein eindeutiges Story-Datum finden. Bitte nutze einmal „Konkretes Datum“, damit der Zeitsprung einen festen Ausgangspunkt hat.'
+            );
+        }
+
+        const endDate = addStoryDirectorDuration(
+            startDate,
+            amount,
+            unit
+        );
+
+        const startValue = formatStoryDirectorDateInput(startDate);
+        const endValue = formatStoryDirectorDateInput(endDate);
+
+        const days = Math.round(
+            (endDate.getTime() - startDate.getTime()) /
+            (1000 * 60 * 60 * 24)
+        );
+
+        return {
+            mode: 'duration',
+            amount,
+            unit,
+            startDate: startValue,
+            endDate: endValue,
+            days,
+            label: `${amount} ${unitLabels[unit]} → ${formatStoryDirectorDate(startValue)} → ${formatStoryDirectorDate(endValue)}`,
+        };
+    }
+
+    throw new Error(
+        'Kein gültiger Time-Skip-Modus ausgewählt.'
+    );
+}
+
+function formatStoryDirectorDate(value) {
+    const [year, month, day] = value
+        .split('-')
+        .map(Number);
+
+    return `${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
+}
+
+function formatStoryDirectorDateInput(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+}
+
+function addStoryDirectorDuration(startDate, amount, unit) {
+    const result = new Date(startDate.getTime());
+
+    if (unit === 'days') {
+        result.setDate(result.getDate() + amount);
+        return result;
+    }
+
+    if (unit === 'weeks') {
+        result.setDate(result.getDate() + amount * 7);
+        return result;
+    }
+
+    if (unit === 'months') {
+        const originalDay = result.getDate();
+        result.setDate(1);
+        result.setMonth(result.getMonth() + amount);
+        const lastDay = new Date(
+            result.getFullYear(),
+            result.getMonth() + 1,
+            0
+        ).getDate();
+        result.setDate(Math.min(originalDay, lastDay));
+        return result;
+    }
+
+    if (unit === 'years') {
+        const originalMonth = result.getMonth();
+        const originalDay = result.getDate();
+        result.setDate(1);
+        result.setFullYear(result.getFullYear() + amount);
+        result.setMonth(originalMonth);
+        const lastDay = new Date(
+            result.getFullYear(),
+            originalMonth + 1,
+            0
+        ).getDate();
+        result.setDate(Math.min(originalDay, lastDay));
+        return result;
+    }
+
+    throw new Error('Unbekannte Zeiteinheit.');
+}
+
+function getStoryDirectorCurrentStoryDate() {
+    const context = SillyTavern.getContext();
+    const chat = context.chat ?? [];
+
+    const recentText = chat
+        .slice(-100)
+        .filter(message =>
+            message &&
+            typeof message.mes === 'string' &&
+            !message.is_system
+        )
+        .map(message => message.mes)
+        .join('\n');
+
+    const matches = [];
+
+    const isoPattern = /\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/g;
+    let match;
+
+    while ((match = isoPattern.exec(recentText)) !== null) {
+        const date = createValidStoryDirectorDate(
+            Number(match[1]),
+            Number(match[2]),
+            Number(match[3])
+        );
+
+        if (date) {
+            matches.push({
+                index: match.index,
+                date,
+            });
+        }
+    }
+
+    const germanPattern = /\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b/g;
+
+    while ((match = germanPattern.exec(recentText)) !== null) {
+        const date = createValidStoryDirectorDate(
+            Number(match[3]),
+            Number(match[2]),
+            Number(match[1])
+        );
+
+        if (date) {
+            matches.push({
+                index: match.index,
+                date,
+            });
+        }
+    }
+
+    matches.sort((a, b) => a.index - b.index);
+
+    return matches.length
+        ? matches[matches.length - 1].date
+        : null;
+}
+
+function createValidStoryDirectorDate(year, month, day) {
+    const date = new Date(year, month - 1, day);
+
+    if (
+        date.getFullYear() !== year ||
+        date.getMonth() !== month - 1 ||
+        date.getDate() !== day
+    ) {
+        return null;
+    }
+
+    date.setHours(0, 0, 0, 0);
+    return date;
 }
 
 function setupToggle(toggle, panel) {
@@ -1277,6 +1703,21 @@ async function generateStoryDirectorEvents() {
 }
 
 async function handleDirectorAction(action) {
+    if (action === 'timeskip') {
+        const settings = document.getElementById(
+            'story-director-timeskip-settings'
+        );
+
+        if (settings) {
+            settings.style.display =
+                settings.style.display === 'none'
+                    ? 'block'
+                    : 'none';
+        }
+
+        return;
+    }
+
     if (action === 'settings') {
         openSettings();
         return;
