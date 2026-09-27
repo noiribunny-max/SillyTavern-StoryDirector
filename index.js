@@ -1282,6 +1282,16 @@ STORY-DIRECTOR-VORSCHLAG:
 ${suggestion}`,
             false
         );
+        
+result.innerHTML = `
+    <div class="story-director-placeholder">
+        <strong>🦉 Story Director bereit</strong>
+
+        <p>
+            Wähle eine Aktion, um neue Story-Ideen zu erhalten.
+        </p>
+    </div>
+`;
 
     } catch (error) {
         console.error(
