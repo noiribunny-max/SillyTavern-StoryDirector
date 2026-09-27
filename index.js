@@ -1081,7 +1081,7 @@ async function generateTwistForSlot(
         Number(tokenSelect?.value) || 1400;
 
     const taskInstruction =
-        getStoryDirectorTaskInstruction(slot.task);
+    getStoryDirectorTwistInstruction(slot.task);
 
     if (!formattedContext) {
         const storyContext =
@@ -1808,6 +1808,60 @@ function getStoryDirectorTaskLabel(task) {
     };
 
     return labels[task] || task || 'Zufällig';
+}
+
+function getStoryDirectorTwistInstruction(task) {
+    const instructions = {
+        random:
+            'Wähle zuerst eine passende dramaturgische Twist-Richtung aus dem aktuellen Storykontext. Die Richtung kann zum Beispiel Romantik, Beziehung, Konflikt, Gefahr, Mystery, Charakterentwicklung, Konsequenz oder eine andere sinnvolle Wendung sein. Entwickle anschließend einen Twist in dieser Richtung.',
+
+        positive:
+            'Der Twist soll eine unerwartet positive Wendung erzeugen, die sich glaubwürdig aus der bisherigen Geschichte ergibt. Die positive Entwicklung soll nicht wie ein zufälliges Geschenk wirken.',
+
+        negative:
+            'Der Twist soll eine unerwartete negative Wendung erzeugen, zum Beispiel einen Rückschlag, eine Komplikation, einen Verlust, eine Enthüllung oder neuen Druck. Die Wendung muss zur bisherigen Geschichte passen.',
+
+        gore:
+            'Der Twist soll, sofern es zur Geschichte passt, eine unerwartete Wendung mit Gewalt oder Gore enthalten. Die Gewalt soll dramaturgisch relevant sein und nicht nur zur Effekthascherei dienen.',
+
+        danger:
+            'Der Twist soll eine unerwartete Gefahr oder Bedrohung offenbaren oder eine bestehende Gefahr in ein neues Licht rücken.',
+
+        twist:
+            'Der Twist soll eine besonders überraschende Wendung darstellen, die eine bestehende Situation, Information oder Erwartung der Geschichte auf unerwartete Weise verändert.',
+
+        romance:
+            'Der Twist soll eine unerwartete romantische Wendung erzeugen. Er kann bestehende Gefühle vertiefen, eine bisher anders verstandene Beziehung verändern, ein verborgenes emotionales Detail offenbaren oder eine romantische Situation in eine neue Richtung lenken. Erfinde keine Gefühle oder Beziehungen ohne Grundlage im Storykontext.',
+
+        relationship:
+            'Der Twist soll eine bestehende Beziehung zwischen Charakteren überraschend verändern oder neu interpretieren. Die Veränderung muss sich aus bisherigen Interaktionen, Konflikten oder gemeinsamen Erlebnissen ergeben.',
+
+        character:
+            'Der Twist soll eine überraschende Charakterentwicklung ermöglichen. Eine bestehende Eigenschaft, Erinnerung, Motivation oder Entscheidung einer Figur soll dadurch in ein neues Licht gerückt werden.',
+
+        mystery:
+            'Der Twist soll ein bestehendes Rätsel, einen Hinweis oder eine offene Frage überraschend neu interpretieren. Eine neue Information soll die bisherige Bedeutung verändern, ohne unbegründete Lore zu erfinden.',
+
+        horror:
+            'Der Twist soll eine unerwartete unheimliche oder bedrohliche Wendung erzeugen. Etwas bereits Bekanntes, Sichergeglaubtes oder scheinbar Harmloses kann dabei eine andere Bedeutung bekommen.',
+
+        conflict:
+            'Der Twist soll einen bestehenden oder entstehenden Konflikt unerwartet verändern oder verschärfen. Die Wendung soll aus den Interessen, Handlungen oder Beziehungen der beteiligten Charaktere entstehen.',
+
+        humor:
+            'Der Twist soll eine unerwartet humorvolle Wendung erzeugen, die zu den Charakteren und der bisherigen Situation passt. Der Humor darf die bestehende Charakterisierung nicht zerstören.',
+
+        worldbuilding:
+            'Der Twist soll eine überraschende Erkenntnis über die Welt, einen Ort, eine Gruppe, ihre Regeln oder ihre Geschichte liefern. Die Information muss mit dem vorhandenen Worldbuilding vereinbar sein.',
+
+        consequence:
+            'Der Twist soll eine unerwartete Konsequenz eines bereits geschehenen Ereignisses oder einer früheren Entscheidung enthüllen. Die Verbindung soll rückblickend nachvollziehbar sein.',
+
+        storythread:
+            'Der Twist soll einen bereits bestehenden offenen Storyfaden überraschend weiterentwickeln. Eine bisher nebensächliche Information oder ein offener Punkt kann dabei eine neue Bedeutung bekommen.',
+    };
+
+    return instructions[task] || instructions.random;
 }
 
 function getStoryDirectorTaskInstruction(task) {
