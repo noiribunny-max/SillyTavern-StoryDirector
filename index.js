@@ -7,6 +7,7 @@ const storyDirectorState = {
     eventGenerationInProgress: false,
     timeSkipSelection: null,
     timeSkipYearMode: 'real',
+    timeSkipGenerationInProgress: false,
 };
 
 async function generateDirectorResponse(prompt, maxTokens) {
@@ -1946,6 +1947,128 @@ async function generateStoryDirectorEvents() {
     return results;
 }
 
+async function generateStoryDirectorTimeSkip(selection = null) {
+    const chosenSelection =
+        selection ?? storyDirectorState.timeSkipSelection;
+
+    if (!chosenSelection) {
+        throw new Error(
+            'Bitte zuerst einen Zeitraum festlegen und übernehmen.'
+        );
+    }
+
+    const tokenSelect =
+        document.getElementById(
+            'story-director-tokens-timeskip'
+        );
+
+    const maxTokens =
+        Number(tokenSelect?.value) || 1200;
+
+    const storyContext =
+        await getStoryDirectorContext({
+            chatLimit: 100,
+            loreLimit: 20,
+        });
+
+    const formattedContext =
+        formatStoryDirectorContextForPrompt(
+            storyContext
+        );
+
+    const yearWarning =
+        chosenSelection.yearMode === 'fictional'
+            ? 'Das verwendete Jahr ist fiktiv. Behandle XX-Jahreszahlen ausschließlich als Story-Zeitrechnung und wandle sie niemals in reale Jahreszahlen um.'
+            : 'Verwende die angegebenen realen Jahreszahlen unverändert.';
+
+    const prompt = `
+Du bist der Story Director eines langfristigen RPGs.
+
+Deine Aufgabe ist es, einen bereits festgelegten ZEITSPRUNG zwischen zwei Story-Daten erzählerisch sinnvoll zu füllen.
+
+=== ZEITSPRUNG ===
+Start: ${chosenSelection.startDisplay}
+Ende: ${chosenSelection.endDisplay}
+Dauer: ${chosenSelection.days} Tage
+${yearWarning}
+
+=== AKTUELLER STORY-KONTEXT ===
+
+${formattedContext}
+
+=== AUFGABE ===
+
+Erstelle eine kompakte Zusammenfassung dessen, was WÄHREND dieses gesamten Zeitraums passiert sein könnte bzw. passiert ist.
+
+Der Zeitsprung soll sich wie eine glaubwürdige Weiterentwicklung der bereits laufenden Geschichte anfühlen. Nutze dafür vor allem bestehende Charaktere, Beziehungen, offene Situationen, bereits angedeutete Handlungsfäden, Lorebook-Fakten und den Doom Tracker.
+
+WICHTIGE REGELN:
+- Der Zeitraum wird vollständig übersprungen. Schreibe keine normale Szene und keine Schritt-für-Schritt-Erzählung.
+- Erfinde nicht für jeden Tag oder Monat ein Ereignis. Nenne nur Entwicklungen, die für die Geschichte relevant sind.
+- Behalte bestehende Namen, Charaktereigenschaften, Beziehungen und Lorebook-Fakten bei.
+- Überschreibe keine bestehenden Fakten.
+- Wenn der Kontext keine konkrete Entwicklung für einen Bereich hergibt, darfst du eine kleine plausible Entwicklung ergänzen, aber keine großen neuen Fakten, Figuren oder Wendungen ohne Grundlage erfinden.
+- Große Veränderungen sollen nachvollziehbar aus dem bisherigen Verlauf entstehen.
+- Lass wichtige Spielerentscheidungen offen, wenn sie aus dem Kontext nicht feststehen.
+- Beende den Zeitraum mit dem neuen erzählerischen Status der Geschichte.
+- Bei sehr langen Zeiträumen darfst du Entwicklungen zeitlich bündeln, statt viele einzelne Ereignisse aufzuzählen.
+- Schreibe auf Deutsch.
+- Keine Analyse des Prompts.
+- Keine Erklärung deiner Denkweise.
+- Keine fertige RPG-Szene.
+- Keine Dialoge.
+- Keine inneren Monologe.
+- Keine Liste mit möglichen Alternativen.
+
+=== FORMAT ===
+
+# ⏩ Zeitsprung: ${chosenSelection.startDisplay} → ${chosenSelection.endDisplay}
+
+## ❤️ Beziehungen
+Welche relevanten Veränderungen oder Entwicklungen gab es zwischen wichtigen Charakteren?
+
+## 🧠 Charakterentwicklung
+Welche wichtigen persönlichen Entwicklungen, Erfahrungen oder Veränderungen gab es?
+
+## ⚔️ Wichtige Ereignisse
+Welche relevanten Ereignisse, Konflikte, Gefahren oder Erfolge fanden statt?
+
+## 🎯 Storyfäden & Konsequenzen
+Welche offenen Handlungsfäden wurden weitergeführt und welche Folgen früherer Ereignisse wurden sichtbar?
+
+## 🌍 Welt & Umfeld
+Welche für die Geschichte relevanten Veränderungen gab es im Umfeld oder in der Welt?
+
+## 📌 Stand am Ende des Zeitsprungs
+Wo stehen die wichtigen Figuren und die Geschichte jetzt?
+
+Halte die einzelnen Abschnitte kompakt. Der gesamte Output soll ungefähr 250–500 Wörter umfassen.
+`;
+
+    const response =
+        await generateDirectorResponse(
+            prompt,
+            maxTokens
+        );
+
+    console.log(
+        '[Story Director] Time Skip generated:',
+        {
+            selection: chosenSelection,
+            response,
+        }
+    );
+
+    return {
+        selection: chosenSelection,
+        response,
+    };
+}
+
+window.testStoryDirectorTimeSkip = async () => {
+    return await generateStoryDirectorTimeSkip();
+};
+
 async function handleDirectorAction(action) {
     if (action === 'timeskip') {
         const settings = document.getElementById(
@@ -2405,22 +2528,216 @@ ${suggestion}`,
     return;
 }
 
-/*
- * Die anderen Funktionen bleiben vorerst Platzhalter.
- */
-result.innerHTML = `
-    <div class="story-director-placeholder">
-        <strong>${name}</strong>
+if (action === 'timeskip') {
+    if (storyDirectorState.timeSkipGenerationInProgress) {
+        console.log(
+            '[Story Director] Time Skip generation already running.'
+        );
+        return;
+    }
 
-        <p>
-            Diese Funktion kommt als Nächstes. 🦉
-        </p>
+    if (!storyDirectorState.timeSkipSelection) {
+        const settings = document.getElementById(
+            'story-director-timeskip-settings'
+        );
 
-        <small>
-            Die Verbindung zur KI funktioniert bereits.
-        </small>
-    </div>
-`;
+        if (settings) {
+            settings.style.display = 'block';
+        }
+
+        if (result) {
+            result.innerHTML = `
+                <div class="story-director-placeholder">
+                    <strong>⏩ Zeitraum fehlt</strong>
+                    <p>
+                        Lege zuerst den Zeitraum fest und klicke auf
+                        „✓ Zeitraum übernehmen“.
+                    </p>
+                </div>
+            `;
+        }
+
+        return;
+    }
+
+    storyDirectorState.timeSkipGenerationInProgress = true;
+
+    result.innerHTML = `
+        <div class="story-director-placeholder">
+            <strong>⏩ Zeitsprung wird erstellt...</strong>
+            <p>🦉 Die Eule schaut nach, was in der Zwischenzeit passiert sein könnte...</p>
+        </div>
+    `;
+
+    try {
+        const timeSkip =
+            await generateStoryDirectorTimeSkip();
+
+        result.innerHTML = '';
+
+        const card =
+            document.createElement('div');
+
+        card.className =
+            'story-director-result-card';
+
+        const title =
+            document.createElement('strong');
+
+        title.textContent =
+            `⏩ ${timeSkip.selection.label}`;
+
+        const text =
+            document.createElement('div');
+
+        text.className =
+            'story-director-result-text';
+
+        text.textContent =
+            timeSkip.response;
+
+        const actions =
+            document.createElement('div');
+
+        actions.className =
+            'story-director-result-actions';
+
+        const editButton =
+            document.createElement('button');
+
+        editButton.className =
+            'story-director-button story-director-edit-button';
+        editButton.type = 'button';
+        editButton.textContent = '✏️ Bearbeiten';
+
+        editButton.addEventListener('click', () => {
+            const textarea =
+                document.createElement('textarea');
+
+            textarea.className =
+                'story-director-edit-textarea';
+            textarea.value =
+                timeSkip.response;
+            textarea.rows = 16;
+
+            text.replaceWith(textarea);
+
+            editButton.textContent =
+                '💾 Speichern';
+            editButton.classList.add(
+                'story-director-save-button'
+            );
+
+            editButton.onclick = () => {
+                timeSkip.response =
+                    textarea.value;
+
+                textarea.replaceWith(text);
+                text.textContent =
+                    timeSkip.response;
+
+                editButton.textContent =
+                    '✏️ Bearbeiten';
+                editButton.classList.remove(
+                    'story-director-save-button'
+                );
+                editButton.onclick = null;
+            };
+        });
+
+        const acceptButton =
+            document.createElement('button');
+
+        acceptButton.className =
+            'story-director-button story-director-accept-button';
+        acceptButton.type = 'button';
+        acceptButton.textContent = '✓ Übernehmen';
+
+        acceptButton.addEventListener('click', async () => {
+            const summary =
+                timeSkip.response.trim();
+
+            if (!summary) {
+                return;
+            }
+
+            try {
+                acceptButton.disabled = true;
+                acceptButton.textContent =
+                    '⏳ Wird übernommen...';
+
+                const context =
+                    SillyTavern.getContext();
+
+                await context.generate(
+                    `Der folgende Story-Director-Zeitsprung wurde für die laufende RPG-Geschichte erstellt.
+
+Nutze ihn als verbindlichen Hintergrund für die nächste RPG-Szene.
+
+WICHTIG:
+- Die Ereignisse des Zeitsprungs gelten ab jetzt als Teil der Geschichte.
+- Behalte alle bestehenden Charaktereigenschaften, Namen, Beziehungen und Lorebook-Fakten bei.
+- Überschreibe keine bestehenden Fakten.
+- Beginne die nächste normale RPG-Szene am Ende des angegebenen Zeitsprungs.
+- Erzähle nicht noch einmal den gesamten Zeitsprung nach.
+- Zeige stattdessen die aktuelle Situation und schreibe die RPG-Szene normal weiter.
+- Erkläre nicht, dass ein Story Director verwendet wurde.
+
+STORY-DIRECTOR-ZEITSPRUNG:
+${summary}`,
+                    false
+                );
+
+                result.innerHTML = `
+                    <div class="story-director-placeholder">
+                        <strong>🦉 Story Director bereit</strong>
+                        <p>Der Zeitsprung wurde als neuer Hintergrund übernommen.</p>
+                    </div>
+                `;
+            } catch (error) {
+                console.error(
+                    '[Story Director] Time Skip accept generation failed:',
+                    error
+                );
+
+                acceptButton.disabled = false;
+                acceptButton.textContent =
+                    '✓ Übernehmen';
+            }
+        });
+
+        actions.appendChild(editButton);
+        actions.appendChild(acceptButton);
+
+        card.appendChild(title);
+        card.appendChild(text);
+        card.appendChild(actions);
+
+        result.appendChild(card);
+
+        console.log(
+            '[Story Director] Time Skip card rendered:',
+            timeSkip
+        );
+    } catch (error) {
+        result.innerHTML = `
+            <div class="story-director-placeholder">
+                <strong>❌ Fehler beim Time Skip</strong>
+                <p>Die Eule konnte den Zeitsprung nicht erstellen.</p>
+                <small>Sieh in der Browser-Konsole nach.</small>
+            </div>
+        `;
+
+        console.error(
+            '[Story Director] Time Skip generation failed:',
+            error
+        );
+    } finally {
+        storyDirectorState.timeSkipGenerationInProgress = false;
+    }
+
+    return;
+}
 
 console.log(`[Story Director] Action: ${action}`);
 }
