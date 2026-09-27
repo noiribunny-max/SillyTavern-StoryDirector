@@ -647,6 +647,14 @@ function createStoryDirectorPanel() {
                     ✓ Zeitraum übernehmen
                 </button>
 
+                <button
+                    type="button"
+                    class="story-director-button"
+                    data-action="timeskip-generate"
+                >
+                    ⏩ Zeitsprung erstellen
+                </button>
+
                 <div
                     id="story-director-timeskip-status"
                     class="story-director-timeskip-status"
@@ -2528,7 +2536,7 @@ ${suggestion}`,
     return;
 }
 
-if (action === 'timeskip') {
+if (action === 'timeskip-generate') {
     if (storyDirectorState.timeSkipGenerationInProgress) {
         console.log(
             '[Story Director] Time Skip generation already running.'
