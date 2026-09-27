@@ -1184,6 +1184,50 @@ window.testStoryDirectorTwistSlot = async () => {
     return await generateTwistForSlot(slot1);
 };
 
+async function generateStoryDirectorTwists() {
+    console.log(
+        '[Story Director] Generating all twist slots...'
+    );
+
+    const slots =
+        getStoryDirectorSlotSettings();
+
+    if (!slots.length) {
+        throw new Error(
+            '[Story Director] Keine Twist-Slots konfiguriert.'
+        );
+    }
+
+    const storyContext =
+        await getStoryDirectorContext({
+            chatLimit: 100,
+        });
+
+    const formattedContext =
+        formatStoryDirectorContextForPrompt(
+            storyContext
+        );
+
+    const results = [];
+
+    for (const slot of slots) {
+        const result =
+            await generateTwistForSlot(
+                slot,
+                formattedContext
+            );
+
+        results.push(result);
+    }
+
+    console.log(
+        '[Story Director] All twist slots generated:',
+        results
+    );
+
+    return results;
+}
+
 async function generateStoryDirectorEvents() {
     console.log(
         '[Story Director] Generating all event slots...'
