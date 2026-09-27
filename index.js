@@ -1252,6 +1252,48 @@ events.forEach(event => {
     acceptButton.type = 'button';
     acceptButton.textContent = '✓ Übernehmen';
 
+    acceptButton.addEventListener('click', async () => {
+    const suggestion = event.response.trim();
+
+    if (!suggestion) {
+        console.warn(
+            '[Story Director] Cannot accept empty suggestion.'
+        );
+        return;
+    }
+
+    try {
+        acceptButton.disabled = true;
+        acceptButton.textContent = '⏳ Wird übernommen...';
+
+        const context = SillyTavern.getContext();
+
+        await context.generate(
+            `Nutze den folgenden Story-Director-Vorschlag als konkrete Vorgabe für die nächste RPG-Szene.
+
+WICHTIG:
+- Setze den Vorschlag in der nächsten Antwort erzählerisch um.
+- Behalte alle bestehenden Charaktereigenschaften, Namen, Beziehungen und Lorebook-Fakten bei.
+- Der Vorschlag darf bestehende Fakten nicht überschreiben.
+- Schreibe die normale RPG-Szene direkt weiter.
+- Erkläre nicht, dass ein Story-Director-Vorschlag verwendet wurde.
+
+STORY-DIRECTOR-VORSCHLAG:
+${suggestion}`,
+            false
+        );
+
+    } catch (error) {
+        console.error(
+            '[Story Director] Accept generation failed:',
+            error
+        );
+
+        acceptButton.disabled = false;
+        acceptButton.textContent = '✓ Übernehmen';
+    }
+});
+
     actions.appendChild(editButton);
     actions.appendChild(acceptButton);
 
