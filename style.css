@@ -180,6 +180,27 @@
     touch-action: pan-y;
 }
 
+.story-director-result-actions {
+    display: flex;
+    gap: 8px;
+
+    margin-top: 10px;
+}
+
+.story-director-result-actions .story-director-button {
+    flex: 1;
+
+    margin: 0;
+    padding: 8px;
+
+    font-size: 0.85em;
+}
+
+.story-director-edit-button,
+.story-director-accept-button {
+    min-height: 38px;
+}
+
 /* -----------------------------------------
    Mobile
    ----------------------------------------- */

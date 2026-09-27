@@ -1164,33 +1164,61 @@ if (action === 'event') {
 
         result.innerHTML = '';
 
-        events.forEach(event => {
-            const card =
-                document.createElement('div');
+events.forEach(event => {
+    const card =
+        document.createElement('div');
 
-            card.className =
-                'story-director-result-card';
+    card.className =
+        'story-director-result-card';
 
-            const title =
-                document.createElement('strong');
+    const title =
+        document.createElement('strong');
 
-            title.textContent =
-                `🎲 ${event.label}`;
+    title.textContent =
+        `🎲 ${event.label}`;
 
-            const text =
-                document.createElement('div');
+    const text =
+        document.createElement('div');
 
-            text.className =
-                'story-director-result-text';
+    text.className =
+        'story-director-result-text';
 
-            text.textContent =
-                event.response;
+    text.textContent =
+        event.response;
 
-            card.appendChild(title);
-            card.appendChild(text);
+    const actions =
+        document.createElement('div');
 
-            result.appendChild(card);
-        });
+    actions.className =
+        'story-director-result-actions';
+
+    const editButton =
+        document.createElement('button');
+
+    editButton.className =
+        'story-director-button story-director-edit-button';
+
+    editButton.type = 'button';
+    editButton.textContent = '✏️ Bearbeiten';
+
+    const acceptButton =
+        document.createElement('button');
+
+    acceptButton.className =
+        'story-director-button story-director-accept-button';
+
+    acceptButton.type = 'button';
+    acceptButton.textContent = '✓ Übernehmen';
+
+    actions.appendChild(editButton);
+    actions.appendChild(acceptButton);
+
+    card.appendChild(title);
+    card.appendChild(text);
+    card.appendChild(actions);
+
+    result.appendChild(card);
+});
 
         console.log(
             '[Story Director] Event cards rendered:',
