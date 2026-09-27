@@ -1201,6 +1201,28 @@ events.forEach(event => {
     editButton.type = 'button';
     editButton.textContent = '✏️ Bearbeiten';
 
+    editButton.addEventListener('click', () => {
+    const textarea =
+        document.createElement('textarea');
+
+    textarea.className =
+        'story-director-edit-textarea';
+
+    textarea.value =
+        event.response;
+
+    textarea.rows = 8;
+
+    text.replaceWith(textarea);
+
+    editButton.textContent =
+        '💾 Speichern';
+
+    editButton.classList.add(
+        'story-director-save-button'
+    );
+});
+
     const acceptButton =
         document.createElement('button');
 
