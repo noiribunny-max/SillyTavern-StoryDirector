@@ -1228,6 +1228,10 @@ async function generateStoryDirectorTwists() {
     return results;
 }
 
+window.testStoryDirectorAllTwists = async () => {
+    return await generateStoryDirectorTwists();
+};
+
 async function generateStoryDirectorEvents() {
     console.log(
         '[Story Director] Generating all event slots...'
