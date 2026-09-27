@@ -2737,7 +2737,7 @@ WICHTIG:
 - Erkläre nicht, dass ein Story Director verwendet wurde.
 
 ZUSÄTZLICHE VORGABEN DES SPIELERS:
-${chosenSelection.notes?.trim() || '(Keine zusätzlichen Vorgaben.)'}
+${timeSkip.selection?.notes?.trim() || '(Keine zusätzlichen Vorgaben.)'}
 
 STORY-DIRECTOR-ZEITSPRUNG:
 ${summary}`,
