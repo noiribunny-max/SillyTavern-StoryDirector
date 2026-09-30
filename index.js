@@ -483,6 +483,204 @@ export async function init() {
     }
 }
 
+
+const STORY_DIRECTOR_INJECTION_ID = 'story-director-active-suggestion';
+
+async function clearStoryDirectorInjection() {
+    const context = SillyTavern.getContext();
+
+    if (typeof context.setExtensionPrompt === 'function') {
+        try {
+            await context.setExtensionPrompt(
+                STORY_DIRECTOR_INJECTION_ID,
+                '',
+                0,
+                0,
+                false,
+                1
+            );
+        } catch (error) {
+            console.warn(
+                '[Story Director] Could not clear active suggestion injection:',
+                error
+            );
+        }
+    }
+
+    storyDirectorState.activeSuggestion = null;
+    storyDirectorState.activeInstruction = null;
+}
+
+async function applyStoryDirectorSuggestion(response) {
+    const suggestion = String(response ?? '').trim();
+
+    if (!suggestion) {
+        throw new Error('[Story Director] Der Vorschlag ist leer.');
+    }
+
+    const context = SillyTavern.getContext();
+
+    if (typeof context.setExtensionPrompt !== 'function') {
+        throw new Error(
+            '[Story Director] SillyTavern stellt setExtensionPrompt nicht zur Verfügung.'
+        );
+    }
+
+    const injection = `
+<story-director>
+Der Story Director gibt eine konkrete Vorgabe für die nächste RPG-Antwort.
+Verwende diese Vorgabe als dramaturgische Grundlage für deine Antwort.
+Behandle sie nicht als Spielertext und erwähne den Story Director nicht.
+Lass die Charaktere weiterhin selbstständig und charaktergetreu handeln.
+
+=== STORY-DIRECTOR-VORGABE ===
+${suggestion}
+=== ENDE DER VORGABE ===
+</story-director>`;
+
+    await context.setExtensionPrompt(
+        STORY_DIRECTOR_INJECTION_ID,
+        injection,
+        0,
+        0,
+        false,
+        1
+    );
+
+    storyDirectorState.activeSuggestion = suggestion;
+    storyDirectorState.activeInstruction = injection;
+
+    console.log(
+        '[Story Director] Suggestion übernommen und für die nächste KI-Antwort injiziert.'
+    );
+
+    const generate =
+        typeof context.Generate === 'function'
+            ? context.Generate
+            : (typeof Generate === 'function' ? Generate : null);
+
+    if (!generate) {
+        await clearStoryDirectorInjection();
+        throw new Error(
+            '[Story Director] Die normale SillyTavern-Generierung konnte nicht gefunden werden.'
+        );
+    }
+
+    try {
+        await generate('normal');
+    } finally {
+        await clearStoryDirectorInjection();
+    }
+}
+
+function createStoryDirectorActionButton(label, className, handler) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `story-director-card-button ${className}`;
+    button.textContent = label;
+    button.addEventListener('click', handler);
+    return button;
+}
+
+function createStoryDirectorResultCard({
+    label,
+    response,
+    failed = false,
+    icon = '🎲',
+}) {
+    const card = document.createElement('div');
+    card.className = 'story-director-result-card';
+
+    const title = document.createElement('strong');
+    title.textContent = `${failed ? '⚠️' : icon} ${label}`;
+    card.appendChild(title);
+
+    const text = document.createElement('div');
+    text.className = 'story-director-result-text';
+    text.textContent = response ?? '';
+    card.appendChild(text);
+
+    if (failed) {
+        return card;
+    }
+
+    const editor = document.createElement('textarea');
+    editor.className = 'story-director-result-editor';
+    editor.value = response ?? '';
+    editor.style.display = 'none';
+    editor.setAttribute('aria-label', 'Story Director Vorschlag bearbeiten');
+
+    const actions = document.createElement('div');
+    actions.className = 'story-director-card-actions';
+
+    const editButton = createStoryDirectorActionButton(
+        '✏️ Bearbeiten',
+        'story-director-edit-button',
+        () => {
+            const editing = editor.style.display !== 'none';
+
+            if (editing) {
+                text.textContent = editor.value.trim();
+                editor.style.display = 'none';
+                editButton.textContent = '✏️ Bearbeiten';
+            } else {
+                editor.value = text.textContent;
+                editor.style.display = 'block';
+                editButton.textContent = '💾 Speichern';
+                editor.focus();
+            }
+        }
+    );
+
+    const acceptButton = createStoryDirectorActionButton(
+        '✅ Übernehmen',
+        'story-director-accept-button',
+        async () => {
+            const currentText =
+                editor.style.display !== 'none'
+                    ? editor.value.trim()
+                    : text.textContent.trim();
+
+            if (!currentText) {
+                return;
+            }
+
+            text.textContent = currentText;
+            editor.value = currentText;
+            editor.style.display = 'none';
+            editButton.textContent = '✏️ Bearbeiten';
+
+            actions.querySelectorAll('button').forEach(button => {
+                button.disabled = true;
+            });
+
+            const originalLabel = acceptButton.textContent;
+            acceptButton.textContent = '🦉 Wird übernommen...';
+
+            try {
+                await applyStoryDirectorSuggestion(currentText);
+            } catch (error) {
+                console.error(
+                    '[Story Director] Suggestion apply failed:',
+                    error
+                );
+                acceptButton.disabled = false;
+                editButton.disabled = false;
+                acceptButton.textContent = originalLabel;
+                throw error;
+            }
+        }
+    );
+
+    actions.appendChild(editButton);
+    actions.appendChild(acceptButton);
+
+    card.appendChild(editor);
+    card.appendChild(actions);
+
+    return card;
+}
+
 function formatStoryDirectorContextForPrompt(storyContext) {
     const chatText = (storyContext.chat ?? [])
         .map(message => {
@@ -1335,30 +1533,14 @@ async function handleDirectorAction(action) {
             result.innerHTML = '';
 
             events.forEach(event => {
-                const card =
-                    document.createElement('div');
-
-                card.className =
-                    'story-director-result-card';
-
-                const title =
-                    document.createElement('strong');
-
-                title.textContent =
-                    `${event.failed ? '⚠️' : '🎲'} ${event.label}`;
-
-                const text =
-                    document.createElement('div');
-
-                text.className =
-                    'story-director-result-text';
-
-                text.textContent =
-                    event.response;
-
-                card.appendChild(title);
-                card.appendChild(text);
-                result.appendChild(card);
+                result.appendChild(
+                    createStoryDirectorResultCard({
+                        label: event.label,
+                        response: event.response,
+                        failed: event.failed,
+                        icon: '🎲',
+                    })
+                );
             });
         } catch (error) {
             result.innerHTML = `
@@ -1403,28 +1585,13 @@ async function handleDirectorAction(action) {
 
             result.innerHTML = '';
 
-            const card =
-                document.createElement('div');
-
-            card.className =
-                'story-director-result-card';
-
-            const title =
-                document.createElement('strong');
-
-            title.textContent = '🆘 Story retten';
-
-            const text =
-                document.createElement('div');
-
-            text.className =
-                'story-director-result-text';
-
-            text.textContent = response;
-
-            card.appendChild(title);
-            card.appendChild(text);
-            result.appendChild(card);
+            result.appendChild(
+                createStoryDirectorResultCard({
+                    label: 'Story retten',
+                    response,
+                    icon: '🆘',
+                })
+            );
         } catch (error) {
             result.innerHTML = `
                 <div class="story-director-placeholder">

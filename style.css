@@ -180,27 +180,6 @@
     touch-action: pan-y;
 }
 
-.story-director-result-actions {
-    display: flex;
-    gap: 8px;
-
-    margin-top: 10px;
-}
-
-.story-director-result-actions .story-director-button {
-    flex: 1;
-
-    margin: 0;
-    padding: 8px;
-
-    font-size: 0.85em;
-}
-
-.story-director-edit-button,
-.story-director-accept-button {
-    min-height: 38px;
-}
-
 /* -----------------------------------------
    Mobile
    ----------------------------------------- */
@@ -492,4 +471,65 @@
 
 .story-director-token-setting .story-director-setting-label {
     margin-bottom: 6px;
+}
+/* =========================================
+   Story Director – Vorschlags-Aktionen
+   ========================================= */
+
+.story-director-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.story-director-card-button {
+    flex: 1;
+    min-height: 38px;
+    padding: 7px 9px;
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--SmartThemeBodyColor, #eee);
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.story-director-card-button:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.story-director-card-button:active {
+    transform: scale(0.98);
+}
+
+.story-director-card-button:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+.story-director-result-editor {
+    display: block;
+    width: 100%;
+    min-height: 150px;
+    margin-top: 8px;
+    padding: 9px;
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    border-radius: 7px;
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--SmartThemeBodyColor, #eee);
+    box-sizing: border-box;
+    resize: vertical;
+    font: inherit;
+    line-height: 1.45;
+}
+
+@media (max-width: 600px) {
+    .story-director-card-actions {
+        flex-direction: column;
+    }
+
+    .story-director-card-button {
+        min-height: 44px;
+    }
 }
