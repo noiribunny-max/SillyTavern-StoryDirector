@@ -7,7 +7,7 @@ const storyDirectorState = {
     eventGenerationInProgress: false,
 };
 
-async function generateDirectorResponse(prompt, maxTokens) {
+async function generateDirectorResponse(prompt, maxTokens, retryOnEmpty = true) {
     const context = SillyTavern.getContext();
     const connectionService =
         context.ConnectionManagerRequestService;
@@ -21,38 +21,94 @@ async function generateDirectorResponse(prompt, maxTokens) {
         );
     }
 
-    try {
-        const result = await connectionService.sendRequest(
-    profileId,
-    prompt,
-    maxTokens,
-    {
-        stream: false,
-        extractData: true,
-    },
-    {
-        reasoning_effort: 'low',
-    }
-);
-
-console.log(
-    '[Story Director] RAW API RESULT:',
-    result
-);
-
-console.log(
-    '[Story Director] CONTENT CHECK:',
-    typeof result?.content,
-    Boolean(result?.content),
-    result?.content
-);
-
-        if (typeof result === 'string') {
-            return result;
+    const extractResponseText = (result) => {
+        if (typeof result === 'string' && result.trim()) {
+            return result.trim();
         }
 
-        if (result?.content) {
-            return result.content;
+        const candidates = [
+            result?.content,
+            result?.text,
+            result?.response?.content,
+            result?.response?.text,
+            result?.message?.content,
+            result?.choices?.[0]?.message?.content,
+            result?.choices?.[0]?.text,
+            result?.data?.content,
+            result?.data?.text,
+        ];
+
+        for (const candidate of candidates) {
+            if (typeof candidate === 'string' && candidate.trim()) {
+                return candidate.trim();
+            }
+        }
+
+        return null;
+    };
+
+    const request = async (requestPrompt, requestTokens) => {
+        const result = await connectionService.sendRequest(
+            profileId,
+            requestPrompt,
+            requestTokens,
+            {
+                stream: false,
+                extractData: true,
+            },
+            {
+                reasoning_effort: 'low',
+            }
+        );
+
+        console.log(
+            '[Story Director] RAW API RESULT:',
+            result
+        );
+
+        console.log(
+            '[Story Director] CONTENT CHECK:',
+            typeof result?.content,
+            Boolean(result?.content),
+            result?.content
+        );
+
+        const text = extractResponseText(result);
+
+        if (text) {
+            return text;
+        }
+
+        return {
+            empty: true,
+            hasReasoning: Boolean(result?.reasoning),
+            raw: result,
+        };
+    };
+
+    try {
+        const firstAttempt = await request(prompt, maxTokens);
+
+        if (typeof firstAttempt === 'string') {
+            return firstAttempt;
+        }
+
+        // Manche Modelle liefern gelegentlich nur einen Reasoning-Block und
+        // kein finales content-Feld. Ein einzelner kompakter Retry verhindert,
+        // dass dadurch der komplette Event-Lauf abbricht.
+        if (retryOnEmpty && firstAttempt?.empty) {
+            console.warn(
+                '[Story Director] Leere Antwort erhalten – kompakter Retry wird versucht.'
+            );
+
+            const retryPrompt = `${prompt}\n\n=== WICHTIGER AUSGABEBEFEHL ===\nGib jetzt ausschließlich die fertige Antwort aus. Keine Analyse, kein Reasoning, keine Vorüberlegungen und keine Meta-Erklärung. Beginne direkt mit dem verlangten Titel bzw. Ergebnis.`;
+
+            const retryTokens = Math.min(Number(maxTokens) || 800, 1000);
+            const secondAttempt = await request(retryPrompt, retryTokens);
+
+            if (typeof secondAttempt === 'string') {
+                return secondAttempt;
+            }
         }
 
         throw new Error(
@@ -941,7 +997,6 @@ async function generateEventForSlot(
     formattedContext = null,
     diversityContext = null
 ) {
-
     const tokenSelect =
         document.getElementById(
             'story-director-tokens-event'
@@ -975,41 +1030,26 @@ async function generateEventForSlot(
     const requireDifferentSuggestions =
         diversityContext?.differentSuggestions ?? true;
 
-    const diversityText =
-        requireDifferentSuggestions && previousSuggestions.length
-            ? `
-=== BEREITS ERZEUGTE VORSCHLÄGE IN DIESER RUNDE ===
+    let diversityInstruction = '';
 
-${previousSuggestions.map((suggestion, index) =>
-    `--- Vorschlag ${index + 1} ---\n${suggestion}`
-).join('\n\n')}
+    if (requireDifferentSuggestions && previousSuggestions.length) {
+        const previousText = previousSuggestions
+            .map((suggestion, index) =>
+                `VORHERIGER VORSCHLAG ${index + 1}:\n${suggestion}`
+            )
+            .join('\n\n');
 
-=== WICHTIGE ABGRENZUNG ===
+        diversityInstruction = `
+=== BEREITS ERZEUGTE VORSCHLÄGE ===
+${previousText}
 
-Dieser Slot MUSS sich in seinem zentralen Storyfokus deutlich von den
-bereits erzeugten Vorschlägen unterscheiden.
-
-- Verwende nicht dieselbe Figur, Fraktion, Gruppe, Organisation, Ort,
-  Gegenstand oder denselben Konflikt als Hauptfokus eines weiteren Slots.
-- Ein bereits verwendetes Storyelement darf höchstens nebensächlich
-  vorkommen, aber nicht erneut das eigentliche Event tragen.
-- Suche stattdessen einen anderen bereits vorhandenen Charakter,
-  eine andere offene Situation, Beziehung, Konsequenz oder ein anderes
-  relevantes Detail aus dem Storykontext.
-- Wenn mehrere Möglichkeiten vorhanden sind, bevorzuge diejenige,
-  die in den bisherigen Vorschlägen noch nicht behandelt wurde.
-- Das Lorebook liefert Hintergrundwissen. Es ist KEINE Aufforderung,
-  denselben Lorebook-Eintrag in mehreren Slots zu verwenden.
-- Erfinde nicht automatisch eine neue Bedrohung oder Fraktion nur,
-  um Unterschiede zu erzeugen. Nutze bevorzugt vorhandenes Material.
-`
-            : `
-=== EIGENSTÄNDIGKEIT DES VORSCHLAGS ===
-
-Erzeuge eine eigenständige Idee. Falls mehrere Slots gleichzeitig
-angefordert werden, soll jeder Slot einen anderen zentralen Storyfokus
-bekommen und nicht bloß eine Variante derselben Idee liefern.
+=== WICHTIGE DIVERSITÄTSREGEL ===
+Dieser Slot muss sich deutlich von den bereits erzeugten Vorschlägen unterscheiden.
+Verwende keinen bereits verwendeten Charakter, Ort, Clan, Gruppe, Gegenstand oder Storykonflikt erneut als Hauptfokus, sofern der gewählte dramaturgische Fokus nicht ausdrücklich genau dessen Fortsetzung verlangt.
+Lorebook-Einträge sind Hintergrundwissen und keine Aufforderung, sie in jedem Vorschlag zu verwenden.
+Suche stattdessen einen anderen relevanten Ansatz aus dem aktuellen Story-Kontext.
 `;
+    }
 
     const prompt = `
 Du bist der Story Director eines langfristigen RPGs.
@@ -1024,8 +1064,7 @@ ${formattedContext}
 === DRAMATURGISCHER FOKUS ===
 
 ${taskInstruction}
-
-${diversityText}
+${diversityInstruction}
 
 === AUFGABE ===
 
@@ -1039,10 +1078,8 @@ WICHTIGE REGELN:
 - Berücksichtige den Doom Tracker.
 - Baue möglichst auf bestehenden Charakterbeziehungen,
   offenen Situationen und Handlungsfäden auf.
-- Lorebook-Einträge sind Hintergrundwissen und dürfen nicht automatisch
-  zum Mittelpunkt des Events werden.
-- Ein auffälliger oder ausführlicher Lorebook-Eintrag darf nicht allein
-  deshalb als Event verwendet werden, weil er im Kontext vorhanden ist.
+- Lorebook-Einträge sind Hintergrundwissen. Verwende sie nur,
+  wenn sie für diesen konkreten Vorschlag wirklich relevant sind.
 - Das Event soll eine konkrete neue Entwicklung oder ein konkretes
   Geschehen darstellen.
 - Das Event darf neue Impulse einführen, soll aber zur bestehenden
@@ -1105,7 +1142,6 @@ FORMAT:
     };
 }
 
-
 window.testStoryDirectorEventSlot = async () => {
     const slots = getStoryDirectorSlotSettings();
 
@@ -1146,43 +1182,113 @@ async function generateStoryDirectorEvents() {
             storyContext
         );
 
-    const savedSettings =
-        loadSuggestionSettings() ?? {};
-
     const differentSuggestions =
-        savedSettings.differentSuggestions ?? true;
+        document.getElementById('story-director-different')?.checked ?? true;
 
     const results = [];
     const previousSuggestions = [];
 
-    // Absichtlich sequenziell: Jeder neue Slot bekommt die bereits
-    // erzeugten Vorschläge mit und kann sich dadurch davon abgrenzen.
     for (const slot of slots) {
-        const result =
-            await generateEventForSlot(
-                slot,
-                formattedContext,
-                {
-                    differentSuggestions,
-                    previousSuggestions,
-                }
+        try {
+            const result =
+                await generateEventForSlot(
+                    slot,
+                    formattedContext,
+                    {
+                        differentSuggestions,
+                        previousSuggestions,
+                    }
+                );
+
+            results.push(result);
+
+            if (differentSuggestions && result?.response) {
+                previousSuggestions.push(result.response);
+            }
+        } catch (error) {
+            // Ein einzelner leerer/fehlgeschlagener API-Call darf nicht mehr
+            // alle bereits erfolgreich erzeugten Slots zerstören.
+            console.warn(
+                `[Story Director] Slot ${slot.slot} konnte nicht erzeugt werden. Der nächste Slot wird trotzdem versucht.`,
+                error
             );
 
-        results.push(result);
-
-        if (differentSuggestions && result?.response) {
-            previousSuggestions.push(result.response);
+            results.push({
+                slot: slot.slot,
+                task: slot.task,
+                label: getStoryDirectorTaskLabel(slot.task),
+                response: 'Für diesen Slot konnte momentan kein Vorschlag erzeugt werden. Die übrigen Slots wurden weiter generiert.',
+                failed: true,
+            });
         }
     }
 
     console.log(
-        '[Story Director] All event slots generated:',
+        '[Story Director] All event slots processed:',
         results
     );
 
     return results;
 }
 
+async function generateStoryDirectorUnstuck() {
+    const tokenSelect =
+        document.getElementById('story-director-tokens-unstuck');
+
+    const maxTokens =
+        Number(tokenSelect?.value) || 1600;
+
+    const storyContext =
+        await getStoryDirectorContext({
+            chatLimit: 100,
+        });
+
+    const formattedContext =
+        formatStoryDirectorContextForPrompt(
+            storyContext
+        );
+
+    const prompt = `
+Du bist der Story Director eines langfristigen RPGs.
+
+Die Geschichte wirkt festgefahren. Analysiere den aktuellen Stand nur so weit,
+wie es nötig ist, um konkrete Wege zu finden, wie die Handlung wieder natürlich
+in Bewegung kommen kann.
+
+=== AKTUELLER STORY-KONTEXT ===
+${formattedContext}
+
+=== AUFGABE ===
+Erstelle 3 klar unterschiedliche Möglichkeiten, die Geschichte aus der aktuellen
+Situation heraus weiterzuführen.
+
+WICHTIGE REGELN:
+- Nutze zuerst bereits bestehende Storyfäden, offene Situationen und Charakterbeziehungen.
+- Lorebook und Doom Tracker sind Hintergrundwissen und müssen nicht zwanghaft verwendet werden.
+- Erfinde keine bereits geschehenen Ereignisse neu.
+- Keine fertige Szene.
+- Keine Dialoge.
+- Keine inneren Monologe.
+- Keine Entscheidung des Spielers erzwingen.
+- Keine vollständigen Story-Arcs.
+- Jede Möglichkeit muss einen anderen Ansatz verfolgen.
+- Schreibe auf Deutsch.
+- Halte jede Möglichkeit kompakt.
+
+FORMAT:
+
+# Möglichkeit 1 – [kurzer Titel]
+[Konkreter Ansatz in 2–4 Sätzen.]
+
+# Möglichkeit 2 – [kurzer Titel]
+[Konkreter Ansatz in 2–4 Sätzen.]
+
+# Möglichkeit 3 – [kurzer Titel]
+[Konkreter Ansatz in 2–4 Sätzen.]
+`;
+
+    return await generateDirectorResponse(prompt, maxTokens);
+}
 
 async function handleDirectorAction(action) {
     if (action === 'settings') {
@@ -1205,38 +1311,98 @@ async function handleDirectorAction(action) {
 
     const name = actionNames[action] ?? 'Aktion';
 
-    /*
-     * Der erste echte Director-Test:
-     * Nur "Event" verwendet bereits die KI.
-     */
+    if (action === 'event') {
+        if (storyDirectorState.eventGenerationInProgress) {
+            console.log(
+                '[Story Director] Event generation already running.'
+            );
+            return;
+        }
 
-if (action === 'event') {
-    if (storyDirectorState.eventGenerationInProgress) {
-        console.log(
-            '[Story Director] Event generation already running.'
-        );
+        storyDirectorState.eventGenerationInProgress = true;
+
+        result.innerHTML = `
+            <div class="story-director-placeholder">
+                <strong>🎲 Events werden generiert...</strong>
+                <p>🦉 Die Eule denkt nach...</p>
+            </div>
+        `;
+
+        try {
+            const events =
+                await generateStoryDirectorEvents();
+
+            result.innerHTML = '';
+
+            events.forEach(event => {
+                const card =
+                    document.createElement('div');
+
+                card.className =
+                    'story-director-result-card';
+
+                const title =
+                    document.createElement('strong');
+
+                title.textContent =
+                    `${event.failed ? '⚠️' : '🎲'} ${event.label}`;
+
+                const text =
+                    document.createElement('div');
+
+                text.className =
+                    'story-director-result-text';
+
+                text.textContent =
+                    event.response;
+
+                card.appendChild(title);
+                card.appendChild(text);
+                result.appendChild(card);
+            });
+        } catch (error) {
+            result.innerHTML = `
+                <div class="story-director-placeholder">
+                    <strong>❌ Fehler bei der Generierung</strong>
+                    <p>Die Eule konnte keine Events erzeugen.</p>
+                    <small>Sieh in der Browser-Konsole nach.</small>
+                </div>
+            `;
+
+            console.error(
+                '[Story Director] Event generation failed:',
+                error
+            );
+        } finally {
+            storyDirectorState.eventGenerationInProgress = false;
+        }
+
         return;
     }
 
-    storyDirectorState.eventGenerationInProgress = true;
+    if (action === 'unstuck') {
+        if (storyDirectorState.eventGenerationInProgress) {
+            console.log(
+                '[Story Director] Another Director generation is already running.'
+            );
+            return;
+        }
 
-    result.innerHTML = `
-        <div class="story-director-placeholder">
-            <strong>🎲 Events werden generiert...</strong>
+        storyDirectorState.eventGenerationInProgress = true;
 
-            <p>
-                🦉 Die Eule denkt nach...
-            </p>
-        </div>
-    `;
+        result.innerHTML = `
+            <div class="story-director-placeholder">
+                <strong>🆘 Die Eule sucht einen Ausweg...</strong>
+                <p>🦉 Die aktuelle Geschichte wird analysiert...</p>
+            </div>
+        `;
 
-    try {
-        const events =
-            await generateStoryDirectorEvents();
+        try {
+            const response =
+                await generateStoryDirectorUnstuck();
 
-        result.innerHTML = '';
+            result.innerHTML = '';
 
-        events.forEach(event => {
             const card =
                 document.createElement('div');
 
@@ -1246,8 +1412,7 @@ if (action === 'event') {
             const title =
                 document.createElement('strong');
 
-            title.textContent =
-                `🎲 ${event.label}`;
+            title.textContent = '🆘 Story retten';
 
             const text =
                 document.createElement('div');
@@ -1255,64 +1420,40 @@ if (action === 'event') {
             text.className =
                 'story-director-result-text';
 
-            text.textContent =
-                event.response;
+            text.textContent = response;
 
             card.appendChild(title);
             card.appendChild(text);
-
             result.appendChild(card);
-        });
+        } catch (error) {
+            result.innerHTML = `
+                <div class="story-director-placeholder">
+                    <strong>❌ Story-Rettung fehlgeschlagen</strong>
+                    <p>Die Eule konnte momentan keinen Ausweg erzeugen.</p>
+                    <small>Sieh in der Browser-Konsole nach.</small>
+                </div>
+            `;
 
-        console.log(
-            '[Story Director] Event cards rendered:',
-            events
-        );
+            console.error(
+                '[Story Director] Unstuck generation failed:',
+                error
+            );
+        } finally {
+            storyDirectorState.eventGenerationInProgress = false;
+        }
 
-    } catch (error) {
-        result.innerHTML = `
-            <div class="story-director-placeholder">
-                <strong>❌ Fehler bei der Generierung</strong>
-
-                <p>
-                    Die Eule konnte keine Events erzeugen.
-                </p>
-
-                <small>
-                    Sieh in der Browser-Konsole nach.
-                </small>
-            </div>
-        `;
-
-        console.error(
-            '[Story Director] Event generation failed:',
-            error
-        );
-    } finally {
-        storyDirectorState.eventGenerationInProgress = false;
+        return;
     }
 
-    return;
-}
+    result.innerHTML = `
+        <div class="story-director-placeholder">
+            <strong>${name}</strong>
+            <p>Diese Funktion kommt als Nächstes. 🦉</p>
+            <small>Die Verbindung zur KI funktioniert bereits.</small>
+        </div>
+    `;
 
-/*
- * Die anderen Funktionen bleiben vorerst Platzhalter.
- */
-result.innerHTML = `
-    <div class="story-director-placeholder">
-        <strong>${name}</strong>
-
-        <p>
-            Diese Funktion kommt als Nächstes. 🦉
-        </p>
-
-        <small>
-            Die Verbindung zur KI funktioniert bereits.
-        </small>
-    </div>
-`;
-
-console.log(`[Story Director] Action: ${action}`);
+    console.log(`[Story Director] Action: ${action}`);
 }
 
 function openSettings() {
@@ -1375,7 +1516,7 @@ function setupSuggestionSettings(panel) {
         { value: 'humor', label: '😂 Humor' },
         { value: 'worldbuilding', label: '🌍 Worldbuilding' },
         { value: 'consequence', label: '🔗 Konsequenz' },
-        { value: 'storythread', label: '🎯 Storyfaden' }
+        { value: 'story-thread', label: '🎯 Storyfaden' }
     ];
 
     function renderSlots(savedSlots = null) {
@@ -1638,7 +1779,7 @@ function getStoryDirectorTaskLabel(task) {
         humor: 'Humor',
         worldbuilding: 'Worldbuilding',
         consequence: 'Konsequenz',
-        storythread: 'Storyfaden',
+        'story-thread': 'Storyfaden',
     };
 
     return labels[task] || task || 'Zufällig';
