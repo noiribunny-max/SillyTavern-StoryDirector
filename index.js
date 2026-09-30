@@ -554,21 +554,20 @@ ${suggestion}
         '[Story Director] Suggestion übernommen und für die nächste KI-Antwort injiziert.'
     );
 
-    const generate =
-        typeof context.Generate === 'function'
-            ? context.Generate
-            : (typeof Generate === 'function' ? Generate : null);
-
-    if (!generate) {
+    if (typeof context.generate !== 'function') {
         await clearStoryDirectorInjection();
         throw new Error(
-            '[Story Director] Die normale SillyTavern-Generierung konnte nicht gefunden werden.'
+            '[Story Director] SillyTavern context.generate konnte nicht gefunden werden.'
         );
     }
 
     try {
-        await generate('normal');
+        // Die Vorgabe steckt bereits in setExtensionPrompt().
+        // Deshalb wird hier die normale SillyTavern-RPG-Generierung
+        // ohne zusätzlichen User-Prompt ausgelöst.
+        await context.generate();
     } finally {
+        // Die Director-Vorgabe gilt ausschließlich für diese eine Antwort.
         await clearStoryDirectorInjection();
     }
 }
