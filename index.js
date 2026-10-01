@@ -586,6 +586,7 @@ function createStoryDirectorResultCard({
     response,
     failed = false,
     icon = '🎲',
+    acceptInstruction = null,
 }) {
     const card = document.createElement('div');
     card.className = 'story-director-result-card';
@@ -657,7 +658,11 @@ function createStoryDirectorResultCard({
             acceptButton.textContent = '🦉 Wird übernommen...';
 
             try {
-                await applyStoryDirectorSuggestion(currentText);
+                const instructionToApply = acceptInstruction
+                    ? acceptInstruction + '\n\n=== AKTUELLER/BEARBEITETER TEXT ===\n' + currentText
+                    : currentText;
+
+                await applyStoryDirectorSuggestion(instructionToApply);
             } catch (error) {
                 console.error(
                     '[Story Director] Suggestion apply failed:',
@@ -1487,6 +1492,452 @@ FORMAT:
     return await generateDirectorResponse(prompt, maxTokens);
 }
 
+
+function parseStoryDirectorDate(value) {
+    const input = String(value ?? '').trim();
+    const match = input.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-]([A-Za-z]{0,2}\d{1,6})$/);
+
+    if (!match) return null;
+
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const yearToken = match[3].toUpperCase();
+
+    if (!Number.isInteger(day) || !Number.isInteger(month)) return null;
+
+    let yearNumber;
+    let yearPrefix = '';
+
+    if (yearToken.startsWith('XX')) {
+        yearPrefix = 'XX';
+        yearNumber = Number(yearToken.slice(2));
+    } else {
+        yearNumber = Number(yearToken);
+    }
+
+    if (!Number.isInteger(yearNumber) || yearNumber < 0 || yearNumber > 999999) {
+        return null;
+    }
+
+    const calculationYear = yearPrefix ? 2000 + yearNumber : yearNumber;
+
+    if (month < 1 || month > 12 || day < 1 || day > 31) {
+        return null;
+    }
+
+    const date = new Date(Date.UTC(calculationYear, month - 1, day));
+
+    if (
+        date.getUTCFullYear() !== calculationYear ||
+        date.getUTCMonth() !== month - 1 ||
+        date.getUTCDate() !== day
+    ) {
+        return null;
+    }
+
+    return {
+        day,
+        month,
+        yearNumber,
+        yearPrefix,
+        calculationYear,
+        date,
+        original: String(day).padStart(2, '0') + '.' +
+            String(month).padStart(2, '0') + '.' + yearToken,
+    };
+}
+
+function formatStoryDirectorDate(dateInfo) {
+    if (!dateInfo) return '';
+
+    const year = dateInfo.yearPrefix
+        ? 'XX' + String(dateInfo.yearNumber).padStart(2, '0')
+        : String(dateInfo.yearNumber);
+
+    return (
+        String(dateInfo.day).padStart(2, '0') + '.' +
+        String(dateInfo.month).padStart(2, '0') + '.' +
+        year
+    );
+}
+
+function addStoryDirectorDuration(start, amount, unit) {
+    if (!start || !Number.isFinite(amount) || amount <= 0) return null;
+
+    const result = {
+        ...start,
+        date: new Date(start.date.getTime()),
+    };
+
+    if (unit === 'days') {
+        result.date.setUTCDate(result.date.getUTCDate() + amount);
+    } else if (unit === 'weeks') {
+        result.date.setUTCDate(result.date.getUTCDate() + amount * 7);
+    } else if (unit === 'months') {
+        result.date.setUTCMonth(result.date.getUTCMonth() + amount);
+    } else if (unit === 'years') {
+        result.date.setUTCFullYear(result.date.getUTCFullYear() + amount);
+    } else {
+        return null;
+    }
+
+    result.day = result.date.getUTCDate();
+    result.month = result.date.getUTCMonth() + 1;
+
+    if (start.yearPrefix) {
+        result.yearNumber = result.date.getUTCFullYear() - 2000;
+        result.yearPrefix = 'XX';
+    } else {
+        result.yearNumber = result.date.getUTCFullYear();
+        result.yearPrefix = '';
+    }
+
+    return result;
+}
+
+function getStoryDirectorDateDifference(start, end) {
+    if (!start || !end) return null;
+
+    return Math.round(
+        (end.date.getTime() - start.date.getTime()) / 86400000
+    );
+}
+
+function createStoryDirectorTimeSkipDialog() {
+    const overlay = document.createElement('div');
+    overlay.id = 'story-director-timeskip-dialog';
+    overlay.style.cssText = [
+        'position:fixed',
+        'inset:0',
+        'z-index:100000',
+        'display:flex',
+        'align-items:center',
+        'justify-content:center',
+        'padding:16px',
+        'background:rgba(0,0,0,.72)',
+    ].join(';');
+
+    const box = document.createElement('div');
+    box.style.cssText = [
+        'width:min(560px,100%)',
+        'max-height:90vh',
+        'overflow:auto',
+        'padding:18px',
+        'border-radius:12px',
+        'background:var(--SmartThemeBlurTintColor,#202020)',
+        'color:var(--SmartThemeBodyColor,#fff)',
+        'box-sizing:border-box',
+        'box-shadow:0 10px 40px rgba(0,0,0,.5)',
+    ].join(';');
+
+    box.innerHTML = `
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:14px;">
+            <strong style="font-size:1.15em;">⏩ Time Skip</strong>
+            <button type="button" data-ts-cancel style="font-size:1.2em;">×</button>
+        </div>
+
+        <label style="display:block;margin-bottom:6px;">Berechnungsart</label>
+        <select data-ts-mode style="width:100%;margin-bottom:14px;">
+            <option value="range">🗓️ Start- und Enddatum</option>
+            <option value="duration">⏩ Startdatum + Dauer</option>
+        </select>
+
+        <div data-ts-start-wrap>
+            <label style="display:block;margin-bottom:6px;">Startdatum</label>
+            <input data-ts-start type="text" placeholder="z. B. 14.05.XX12"
+                style="width:100%;box-sizing:border-box;margin-bottom:12px;">
+        </div>
+
+        <div data-ts-end-wrap>
+            <label style="display:block;margin-bottom:6px;">Enddatum</label>
+            <input data-ts-end type="text" placeholder="z. B. 20.10.XX12"
+                style="width:100%;box-sizing:border-box;margin-bottom:12px;">
+        </div>
+
+        <div data-ts-duration-wrap style="display:none;">
+            <label style="display:block;margin-bottom:6px;">Dauer</label>
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+                <input data-ts-duration type="number" min="1" step="1" placeholder="z. B. 2"
+                    style="flex:1;min-width:0;">
+                <select data-ts-unit style="flex:1;min-width:0;">
+                    <option value="days">Tage</option>
+                    <option value="weeks">Wochen</option>
+                    <option value="months">Monate</option>
+                    <option value="years">Jahre</option>
+                </select>
+            </div>
+        </div>
+
+        <label style="display:block;margin-bottom:6px;">📝 Zusätzliche Vorgaben</label>
+        <textarea data-ts-instructions rows="6"
+            placeholder="z. B. Mitsuki ist noch nicht zurück. Ignoriere Mitsuki in der Zusammenfassung. Sie schreibt Naruto gelegentlich Briefe mit Fotos und Zeichnungen."
+            style="width:100%;box-sizing:border-box;resize:vertical;margin-bottom:14px;"></textarea>
+
+        <div data-ts-error style="display:none;margin-bottom:12px;padding:8px;border-radius:8px;background:rgba(180,40,40,.25);"></div>
+
+        <div style="display:flex;justify-content:flex-end;gap:8px;">
+            <button type="button" data-ts-cancel>Abbrechen</button>
+            <button type="button" data-ts-submit>⏩ Zeitsprung erstellen</button>
+        </div>
+    `;
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const mode = box.querySelector('[data-ts-mode]');
+    const endWrap = box.querySelector('[data-ts-end-wrap]');
+    const durationWrap = box.querySelector('[data-ts-duration-wrap]');
+    const errorBox = box.querySelector('[data-ts-error]');
+
+    const updateMode = () => {
+        const durationMode = mode.value === 'duration';
+        endWrap.style.display = durationMode ? 'none' : 'block';
+        durationWrap.style.display = durationMode ? 'block' : 'none';
+    };
+
+    mode.addEventListener('change', updateMode);
+
+    const close = () => overlay.remove();
+
+    box.querySelectorAll('[data-ts-cancel]').forEach(button => {
+        button.addEventListener('click', close);
+    });
+
+    return { overlay, box, mode, errorBox, close };
+}
+
+async function openStoryDirectorTimeSkipDialog() {
+    const dialog = createStoryDirectorTimeSkipDialog();
+    const box = dialog.box;
+
+    const submit = box.querySelector('[data-ts-submit]');
+    const startInput = box.querySelector('[data-ts-start]');
+    const endInput = box.querySelector('[data-ts-end]');
+    const durationInput = box.querySelector('[data-ts-duration]');
+    const unitInput = box.querySelector('[data-ts-unit]');
+    const instructionsInput = box.querySelector('[data-ts-instructions]');
+
+    submit.addEventListener('click', async () => {
+        const start = parseStoryDirectorDate(startInput.value);
+        const mode = dialog.mode.value;
+
+        let end = null;
+        let durationText = '';
+
+        if (!start) {
+            dialog.errorBox.textContent =
+                'Bitte gib ein gültiges Startdatum ein, z. B. 14.05.XX12.';
+            dialog.errorBox.style.display = 'block';
+            return;
+        }
+
+        if (mode === 'range') {
+            end = parseStoryDirectorDate(endInput.value);
+
+            if (!end) {
+                dialog.errorBox.textContent =
+                    'Bitte gib ein gültiges Enddatum ein, z. B. 20.10.XX12.';
+                dialog.errorBox.style.display = 'block';
+                return;
+            }
+
+            if (end.date <= start.date) {
+                dialog.errorBox.textContent =
+                    'Das Enddatum muss nach dem Startdatum liegen.';
+                dialog.errorBox.style.display = 'block';
+                return;
+            }
+
+            const days = getStoryDirectorDateDifference(start, end);
+            durationText = days + ' Tag' + (days === 1 ? '' : 'e');
+        } else {
+            const amount = Number(durationInput.value);
+
+            if (!Number.isInteger(amount) || amount <= 0) {
+                dialog.errorBox.textContent =
+                    'Bitte gib eine positive ganze Zahl für die Dauer ein.';
+                dialog.errorBox.style.display = 'block';
+                return;
+            }
+
+            end = addStoryDirectorDuration(start, amount, unitInput.value);
+
+            if (!end) {
+                dialog.errorBox.textContent =
+                    'Die Dauer konnte nicht berechnet werden.';
+                dialog.errorBox.style.display = 'block';
+                return;
+            }
+
+            const unitLabels = {
+                days: amount === 1 ? 'Tag' : 'Tage',
+                weeks: amount === 1 ? 'Woche' : 'Wochen',
+                months: amount === 1 ? 'Monat' : 'Monate',
+                years: amount === 1 ? 'Jahr' : 'Jahre',
+            };
+
+            durationText = amount + ' ' + unitLabels[unitInput.value];
+        }
+
+        const startText = formatStoryDirectorDate(start);
+        const endText = formatStoryDirectorDate(end);
+        const extraInstructions = instructionsInput.value.trim();
+
+        dialog.close();
+
+        const tokenSelect =
+            document.getElementById('story-director-tokens-timeskip');
+
+        const maxTokens = Number(tokenSelect?.value) || 1200;
+
+        const storyContext =
+            await getStoryDirectorContext({ chatLimit: 100 });
+
+        const formattedContext =
+            formatStoryDirectorContextForPrompt(storyContext);
+
+        const prompt = `
+Du bist der Story Director eines langfristigen RPGs.
+
+Die Geschichte wird für einen definierten Zeitraum übersprungen.
+Du sollst zusammenfassen, was WÄHREND dieses Zeitraums sinnvoll und
+nachvollziehbar passiert ist, damit die RPG-Geschichte anschließend am
+Ende des Zeitraums fortgesetzt werden kann.
+
+=== ZEITRAUM ===
+Start: ${startText}
+Ende: ${endText}
+Dauer: ${durationText}
+
+=== AKTUELLER STORY-KONTEXT ===
+${formattedContext}
+
+=== ZUSÄTZLICHE VORGABEN DES SPIELERS ===
+${extraInstructions || '(Keine zusätzlichen Vorgaben.)'}
+
+Diese Vorgaben sind feste Rahmenbedingungen für den Zeitsprung.
+Sie sind keine bloßen Story-Ideen und dürfen nicht ignoriert werden.
+Wenn eine Figur laut Vorgabe noch nicht zurück ist, darf sie während
+dieses Zeitsprungs nicht plötzlich zurückkehren.
+Wenn eine Figur ausdrücklich nicht als Hauptfokus behandelt werden soll,
+mache sie nicht zum zentralen Entwicklungspunkt.
+Erlaubte indirekte Ereignisse, die ausdrücklich vorgegeben wurden,
+dürfen aber berücksichtigt werden.
+
+=== AUFGABE ===
+Erstelle eine kompakte, aber inhaltlich brauchbare Zusammenfassung
+der relevanten Entwicklungen WÄHREND des Zeitsprungs.
+
+Berücksichtige:
+- bestehende Charakterbeziehungen
+- Charakterentwicklung
+- wichtige Ereignisse
+- offene Storyfäden und deren Konsequenzen
+- relevante Veränderungen in Welt und Umfeld
+- den Zustand der Geschichte am Ende des Zeitsprungs
+
+Für lange Zeiträume musst du nicht künstlich jeden Monat oder jede
+Woche mit Ereignissen füllen. Beschreibe nur Entwicklungen, die für
+die Geschichte tatsächlich relevant sind.
+
+WICHTIGE REGELN:
+- Nutze zuerst den vorhandenen Story-Kontext.
+- Lorebook und Doom Tracker sind Hintergrundwissen und müssen nur
+  verwendet werden, wenn sie relevant sind.
+- Erfinde keine bereits geschehenen Ereignisse neu.
+- Widersprich keinen bestehenden Charakter- oder Loreinformationen.
+- Keine ausgeschriebene Szene.
+- Keine langen Dialoge.
+- Keine Spielerentscheidung erzwingen.
+- Der Zeitsprung endet exakt am angegebenen Enddatum.
+- Schreibe auf Deutsch.
+
+FORMAT:
+
+# ⏩ Zeitsprung: ${startText} → ${endText}
+
+## ❤️ Beziehungen
+[Relevante Entwicklungen.]
+
+## 🧠 Charakterentwicklung
+[Relevante Entwicklungen.]
+
+## ⚔️ Wichtige Ereignisse
+[Relevante Ereignisse.]
+
+## 🎯 Storyfäden & Konsequenzen
+[Was sich bei offenen Handlungsfäden verändert.]
+
+## 🌍 Welt & Umfeld
+[Nur relevante Veränderungen.]
+
+## 📌 Stand am Ende des Zeitsprungs
+[Die Ausgangslage für die nächste RPG-Antwort.]
+`;
+
+        const result = document.getElementById('story-director-result');
+
+        if (!result) return;
+
+        storyDirectorState.eventGenerationInProgress = true;
+
+        result.innerHTML = `
+            <div class="story-director-placeholder">
+                <strong>⏩ Zeitsprung wird berechnet...</strong>
+                <p>🦉 Die Eule schaut, was in dieser Zeit passiert...</p>
+            </div>
+        `;
+
+        try {
+            const response =
+                await generateDirectorResponse(prompt, maxTokens);
+
+            result.innerHTML = '';
+
+            const acceptInstruction = `
+Der Time Skip wurde bereits vollständig berücksichtigt.
+
+Der Zeitsprung von ${startText} bis ${endText} (${durationText}) ist
+JETZT kanonisch passiert. Die untenstehende Zusammenfassung beschreibt
+die relevanten Entwicklungen während dieses Zeitraums.
+
+Setze die RPG-Geschichte unmittelbar AM ENDE dieses Zeitsprungs fort.
+Erzähle den Zeitsprung nicht noch einmal vollständig nach und springe
+nicht zurück zum Startdatum.
+
+Behandle die bestehenden Charakter-, Lorebook- und Weltinformationen
+weiterhin als verbindlich.
+
+=== ZEITSPRUNG-ZUSAMMENFASSUNG ===
+`;
+
+            result.appendChild(
+                createStoryDirectorResultCard({
+                    label: 'Time Skip ' + startText + ' → ' + endText,
+                    response,
+                    icon: '⏩',
+                    acceptInstruction,
+                })
+            );
+        } catch (error) {
+            result.innerHTML = `
+                <div class="story-director-placeholder">
+                    <strong>❌ Time Skip fehlgeschlagen</strong>
+                    <p>Die Eule konnte den Zeitsprung momentan nicht berechnen.</p>
+                    <small>Sieh in der Browser-Konsole nach.</small>
+                </div>
+            `;
+
+            console.error(
+                '[Story Director] Time Skip generation failed:',
+                error
+            );
+        } finally {
+            storyDirectorState.eventGenerationInProgress = false;
+        }
+    });
+}
+
 async function handleDirectorAction(action) {
     if (action === 'settings') {
         openSettings();
@@ -1558,6 +2009,16 @@ async function handleDirectorAction(action) {
             storyDirectorState.eventGenerationInProgress = false;
         }
 
+        return;
+    }
+
+    if (action === 'timeskip') {
+        if (storyDirectorState.eventGenerationInProgress) {
+            console.log('[Story Director] Another Director generation is already running.');
+            return;
+        }
+
+        await openStoryDirectorTimeSkipDialog();
         return;
     }
 
