@@ -527,16 +527,26 @@ async function applyStoryDirectorSuggestion(response) {
     }
 
     const injection = `
-<story-director>
-Der Story Director gibt eine konkrete Vorgabe für die nächste RPG-Antwort.
-Verwende diese Vorgabe als dramaturgische Grundlage für deine Antwort.
-Behandle sie nicht als Spielertext und erwähne den Story Director nicht.
-Lass die Charaktere weiterhin selbstständig und charaktergetreu handeln.
+<OOC>
+VERBINDLICHE REGIEANWEISUNG FÜR DIE NÄCHSTE RPG-ANTWORT
 
-=== STORY-DIRECTOR-VORGABE ===
+Die folgende Vorgabe MUSS in der unmittelbar nächsten RPG-Antwort tatsächlich umgesetzt und sichtbar ausgespielt werden.
+
+Es reicht NICHT, die Vorgabe nur intern zu berücksichtigen, darüber nachzudenken oder für eine spätere Antwort vorzumerken.
+Das beschriebene Ereignis bzw. der beschriebene Zeitsprung muss JETZT in der nächsten Antwort umgesetzt werden.
+
+- Behandle diese Anweisung nicht als Spielertext.
+- Erwähne diese OOC-Anweisung, den Story Director oder die Vorgabe niemals in der RPG-Antwort.
+- Lass NPCs weiterhin selbstständig und charaktergetreu handeln.
+- Erfinde keine Handlungen, Gedanken oder Entscheidungen für den Spielercharakter.
+- Setze die Vorgabe als Teil der normalen RPG-Erzählung um.
+- Verschiebe die Umsetzung nicht auf eine spätere Antwort.
+- Eine bloße Andeutung oder ein Hinweis darauf, dass das Ereignis passieren könnte, reicht nicht aus.
+
+=== VERBINDLICHE REGIEVORGABE ===
 ${suggestion}
-=== ENDE DER VORGABE ===
-</story-director>`;
+=== ENDE DER REGIEVORGABE ===
+</OOC>`;
 
     await context.setExtensionPrompt(
         STORY_DIRECTOR_INJECTION_ID,
