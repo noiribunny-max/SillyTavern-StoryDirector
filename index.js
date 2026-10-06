@@ -5,7 +5,29 @@ const storyDirectorState = {
     activeSuggestion: null,
     activeInstruction: null,
     eventGenerationInProgress: false,
+    applyingSuggestion: false,
 };
+
+const STORY_DIRECTOR_EMPTY_HTML = `<div class="story-director-empty">Noch kein Vorschlag vorhanden.<br><span>Die weise Eule wartet auf ihren Einsatz. 🦉</span></div>`;
+function resetStoryDirectorRound() {
+    storyDirectorState.suggestions = [];
+    storyDirectorState.activeSuggestion = null;
+    storyDirectorState.activeInstruction = null;
+    const result = document.getElementById('story-director-result');
+    if (result) result.innerHTML = STORY_DIRECTOR_EMPTY_HTML;
+    const direction = document.getElementById('story-director-direction');
+    if (direction) direction.value = '';
+}
+function normalizeStoryDirectorTask(task) { return task === 'storythread' ? 'story-thread' : task; }
+function getStoryDirectorDirectionInstruction(direction) {
+    if (!direction?.trim()) return '';
+    return `
+=== OPTIONALE KREATIVE RICHTUNG ===
+${direction.trim()}
+=== ENDE DER RICHTUNG ===
+Diese Idee ist kreative Steuerung, KEINE bereits geschehene Tatsache und KEINE verbindliche fertige Szene. Entwickle eine mögliche Umsetzung passend zum Storykontext und zur Slot-Stimmung. Alle Slots sind Alternativen; variiere Mechanismus, Enthüllung oder Konsequenz statt dieselbe Idee umzuformulieren.
+`;
+}
 
 async function generateDirectorResponse(prompt, maxTokens, retryOnEmpty = true) {
     const context = SillyTavern.getContext();
@@ -512,6 +534,19 @@ async function clearStoryDirectorInjection() {
 }
 
 async function applyStoryDirectorSuggestion(response) {
+    if (storyDirectorState.applyingSuggestion || storyDirectorState.eventGenerationInProgress) {
+        throw new Error('[Story Director] Eine Generierung oder Übernahme läuft bereits.');
+    }
+    storyDirectorState.applyingSuggestion = true;
+    try {
+        await performStoryDirectorSuggestion(response);
+        resetStoryDirectorRound();
+    } finally {
+        storyDirectorState.applyingSuggestion = false;
+    }
+}
+
+async function performStoryDirectorSuggestion(response) {
     const suggestion = String(response ?? '').trim();
 
     if (!suggestion) {
@@ -575,7 +610,8 @@ ${suggestion}
         // Die Vorgabe steckt bereits in setExtensionPrompt().
         // Deshalb wird hier die normale SillyTavern-RPG-Generierung
         // ohne zusätzlichen User-Prompt ausgelöst.
-        await context.generate();
+        const generated = await context.generate();
+        if (generated === false) throw new Error('[Story Director] RPG-Generierung wurde abgebrochen.');
     } finally {
         // Die Director-Vorgabe gilt ausschließlich für diese eine Antwort.
         await clearStoryDirectorInjection();
@@ -800,6 +836,9 @@ function createStoryDirectorPanel() {
                 🎬 Geschichte beeinflussen
             </div>
 
+            <label for="story-director-direction">Idee / Richtung für Event oder Twist (optional)</label>
+            <textarea id="story-director-direction" class="story-director-direction" rows="2" placeholder="Freie Generierung oder eine kreative Richtung…"></textarea>
+
             <button class="story-director-button" data-action="event">
                 🎲 Event würfeln
             </button>
@@ -822,11 +861,7 @@ function createStoryDirectorPanel() {
         </div>
 
         <div class="story-director-result" id="story-director-result">
-            <div class="story-director-empty">
-                Noch kein Vorschlag vorhanden.
-                <br>
-                <span>Die weise Eule wartet auf ihren Einsatz. 🦉</span>
-            </div>
+            ${STORY_DIRECTOR_EMPTY_HTML}
         </div>
                 <div class="story-director-settings" id="story-director-settings">
             <div class="story-director-settings-header">
@@ -1207,20 +1242,20 @@ function restoreHudPosition(toggle, panel) {
 async function generateEventForSlot(
     slot,
     formattedContext = null,
-    diversityContext = null
+    diversityContext = null,
+    kind = 'event',
+    direction = ''
 ) {
     const tokenSelect =
         document.getElementById(
-            'story-director-tokens-event'
+            `story-director-tokens-${kind}`
         );
 
     const maxTokens =
-        Number(tokenSelect?.value) || 800;
+        Number(tokenSelect?.value) || (kind === 'twist' ? 1400 : 800);
 
     const taskInstruction =
-        getStoryDirectorTaskInstruction(
-            slot.task
-        );
+        (kind === 'twist' ? getStoryDirectorTwistInstruction : getStoryDirectorTaskInstruction)(slot.task);
 
     if (!formattedContext) {
         const storyContext =
@@ -1240,7 +1275,7 @@ async function generateEventForSlot(
             : [];
 
     const requireDifferentSuggestions =
-        diversityContext?.differentSuggestions ?? true;
+        Boolean(direction.trim()) || (diversityContext?.differentSuggestions ?? true);
 
     let diversityInstruction = '';
 
@@ -1257,13 +1292,13 @@ ${previousText}
 
 === WICHTIGE DIVERSITÄTSREGEL ===
 Dieser Slot muss sich deutlich von den bereits erzeugten Vorschlägen unterscheiden.
-Verwende keinen bereits verwendeten Charakter, Ort, Clan, Gruppe, Gegenstand oder Storykonflikt erneut als Hauptfokus, sofern der gewählte dramaturgische Fokus nicht ausdrücklich genau dessen Fortsetzung verlangt.
+${direction.trim() ? 'Behalte den Kern der kreativen Richtung bei; darin gewünschte Figuren oder Orte dürfen wiederkehren. Wähle aber einen anderen Mechanismus, eine andere Enthüllung oder Konsequenz und berücksichtige die jeweilige Slot-Stimmung.' : 'Verwende keinen bereits verwendeten Charakter, Ort, Clan, Gruppe, Gegenstand oder Storykonflikt erneut als Hauptfokus, sofern der gewählte dramaturgische Fokus nicht ausdrücklich genau dessen Fortsetzung verlangt.'}
 Lorebook-Einträge sind Hintergrundwissen und keine Aufforderung, sie in jedem Vorschlag zu verwenden.
 Suche stattdessen einen anderen relevanten Ansatz aus dem aktuellen Story-Kontext.
 `;
     }
 
-    const prompt = `
+    const eventPrompt = `
 Du bist der Story Director eines langfristigen RPGs.
 
 Du entwickelst aus dem folgenden Story-Kontext EINE konkrete Idee
@@ -1276,6 +1311,7 @@ ${formattedContext}
 === DRAMATURGISCHER FOKUS ===
 
 ${taskInstruction}
+${getStoryDirectorDirectionInstruction(direction)}
 ${diversityInstruction}
 
 === AUFGABE ===
@@ -1329,14 +1365,67 @@ FORMAT:
 [Konkrete Beschreibung des Ereignisses.]
 `;
 
+    const twistPrompt = `
+Du bist der Story Director eines laufenden RPGs.
+
+Deine Aufgabe ist es, eine einzelne mögliche TWIST-Idee
+für die nächste Entwicklung der Geschichte zu entwerfen.
+
+=== AKTUELLER STORY-KONTEXT ===
+
+${formattedContext}
+
+=== GEWÜNSCHTE DRAMATURGISCHE RICHTUNG ===
+
+${taskInstruction}
+${getStoryDirectorDirectionInstruction(direction)}
+${diversityInstruction}
+
+=== REGELN FÜR DEN TWIST ===
+
+- Der Twist muss sich aus dem bisherigen Storyverlauf ergeben.
+- Er soll überraschend sein, aber rückblickend nachvollziehbar bleiben.
+- Nutze vorhandene Charaktere, Beziehungen, offene Situationen,
+  Hinweise und Storyfäden.
+- Bevorzuge bereits vorhandene Informationen gegenüber neu erfundenen Fakten.
+- Erfinde keine wichtigen Hintergrundinformationen über Charaktere,
+  wenn dafür keine Grundlage im vorhandenen Kontext existiert.
+- Der Twist darf bestehende Lorebook-Fakten NICHT widersprechen.
+- Der Twist soll die Geschichte tatsächlich verändern oder
+  eine bestehende Situation in ein neues Licht rücken.
+- Vermeide einen Twist, der lediglich ein normales neues Ereignis darstellt.
+- Lege keine endgültige Reaktion des Spielers fest.
+- Schreibe keine vollständige Szene.
+- Schreibe keine Dialoge.
+- Schreibe keine Analyse deiner eigenen Überlegungen.
+- Schreibe keine Liste mehrerer Twists.
+- Schreibe auf Deutsch.
+- Formuliere einen konkreten Regie-Vorschlag.
+- Halte den Vorschlag ungefähr bei 80–150 Wörtern.
+- Schreibe maximal 2 kurze Absätze.
+
+WICHTIG:
+
+Die gewählte dramaturgische Richtung bestimmt die ART des Twists.
+Sie ist kein Stichwort, das einfach wörtlich in den Twist eingebaut
+werden muss.
+
+Der Twist soll zur aktuellen Geschichte passen und nicht künstlich
+wirken.
+
+FORMAT:
+
+# Twist-Titel
+
+[Konkrete Beschreibung der überraschenden Wendung.]
+`;
+
+    const prompt = kind === 'twist' ? twistPrompt : eventPrompt;
     const response =
-        await generateDirectorResponse(
-            prompt,
-            maxTokens
-        );
+        await generateDirectorResponse(prompt, maxTokens);
 
     console.log(
-        '[Story Director] Event slot generated:',
+        '[Story Director] Suggestion slot generated:',
         {
             slot: slot.slot,
             task: slot.task,
@@ -1370,7 +1459,7 @@ window.testStoryDirectorAllEvents = async () => {
     return await generateStoryDirectorEvents();
 };
 
-async function generateStoryDirectorEvents() {
+async function generateStoryDirectorEvents(kind = 'event', direction = document.getElementById('story-director-direction')?.value ?? '') {
     console.log(
         '[Story Director] Generating all event slots...'
     );
@@ -1395,7 +1484,7 @@ async function generateStoryDirectorEvents() {
         );
 
     const differentSuggestions =
-        document.getElementById('story-director-different')?.checked ?? true;
+        Boolean(direction.trim()) || (document.getElementById('story-director-different')?.checked ?? true);
 
     const results = [];
     const previousSuggestions = [];
@@ -1409,7 +1498,9 @@ async function generateStoryDirectorEvents() {
                     {
                         differentSuggestions,
                         previousSuggestions,
-                    }
+                    },
+                    kind,
+                    direction
                 );
 
             results.push(result);
@@ -1968,8 +2059,9 @@ async function handleDirectorAction(action) {
     };
 
     const name = actionNames[action] ?? 'Aktion';
+    if (storyDirectorState.applyingSuggestion) return;
 
-    if (action === 'event') {
+    if (action === 'event' || action === 'twist') {
         if (storyDirectorState.eventGenerationInProgress) {
             console.log(
                 '[Story Director] Event generation already running.'
@@ -1981,14 +2073,14 @@ async function handleDirectorAction(action) {
 
         result.innerHTML = `
             <div class="story-director-placeholder">
-                <strong>🎲 Events werden generiert...</strong>
+                <strong>${name}s werden generiert...</strong>
                 <p>🦉 Die Eule denkt nach...</p>
             </div>
         `;
 
         try {
             const events =
-                await generateStoryDirectorEvents();
+                await generateStoryDirectorEvents(action);
 
             result.innerHTML = '';
 
@@ -1998,7 +2090,7 @@ async function handleDirectorAction(action) {
                         label: event.label,
                         response: event.response,
                         failed: event.failed,
-                        icon: '🎲',
+                        icon: action === 'twist' ? '🌀' : '🎲',
                     })
                 );
             });
@@ -2006,7 +2098,7 @@ async function handleDirectorAction(action) {
             result.innerHTML = `
                 <div class="story-director-placeholder">
                     <strong>❌ Fehler bei der Generierung</strong>
-                    <p>Die Eule konnte keine Events erzeugen.</p>
+                    <p>Die Eule konnte keine ${action === 'twist' ? 'Twists' : 'Events'} erzeugen.</p>
                     <small>Sieh in der Browser-Konsole nach.</small>
                 </div>
             `;
@@ -2187,7 +2279,7 @@ function setupSuggestionSettings(panel) {
         );
 
         if (savedSlot) {
-            select.value = savedSlot.task;
+            select.value = normalizeStoryDirectorTask(savedSlot.task);
         }
 
         slot.appendChild(label);
@@ -2383,7 +2475,7 @@ function getStoryDirectorSlotSettings() {
         const settings = JSON.parse(saved);
 
         return Array.isArray(settings.slots)
-            ? settings.slots
+            ? settings.slots.map(slot => ({ ...slot, task: normalizeStoryDirectorTask(slot.task) }))
             : [];
     } catch (error) {
         console.error(
@@ -2419,7 +2511,62 @@ function getStoryDirectorTaskLabel(task) {
         'story-thread': 'Storyfaden',
     };
 
+    task = normalizeStoryDirectorTask(task);
     return labels[task] || task || 'Zufällig';
+}
+
+function getStoryDirectorTwistInstruction(task) {
+    const instructions = {
+        random:
+            'Wähle zuerst eine passende dramaturgische Twist-Richtung aus dem aktuellen Storykontext. Die Richtung kann zum Beispiel Romantik, Beziehung, Konflikt, Gefahr, Mystery, Charakterentwicklung, Konsequenz oder eine andere sinnvolle Wendung sein. Entwickle anschließend einen Twist in dieser Richtung.',
+
+        positive:
+            'Der Twist soll eine unerwartet positive Wendung erzeugen, die sich glaubwürdig aus der bisherigen Geschichte ergibt. Die positive Entwicklung soll nicht wie ein zufälliges Geschenk wirken.',
+
+        negative:
+            'Der Twist soll eine unerwartete negative Wendung erzeugen, zum Beispiel einen Rückschlag, eine Komplikation, einen Verlust, eine Enthüllung oder neuen Druck. Die Wendung muss zur bisherigen Geschichte passen.',
+
+        gore:
+            'Der Twist soll, sofern es zur Geschichte passt, eine unerwartete Wendung mit Gewalt oder Gore enthalten. Die Gewalt soll dramaturgisch relevant sein und nicht nur zur Effekthascherei dienen.',
+
+        danger:
+            'Der Twist soll eine unerwartete Gefahr oder Bedrohung offenbaren oder eine bestehende Gefahr in ein neues Licht rücken.',
+
+        twist:
+            'Der Twist soll eine besonders überraschende Wendung darstellen, die eine bestehende Situation, Information oder Erwartung der Geschichte auf unerwartete Weise verändert.',
+
+        romance:
+            'Der Twist soll eine unerwartete romantische Wendung erzeugen. Er kann bestehende Gefühle vertiefen, eine bisher anders verstandene Beziehung verändern, ein verborgenes emotionales Detail offenbaren oder eine romantische Situation in eine neue Richtung lenken. Erfinde keine Gefühle oder Beziehungen ohne Grundlage im Storykontext.',
+
+        relationship:
+            'Der Twist soll eine bestehende Beziehung zwischen Charakteren überraschend verändern oder neu interpretieren. Die Veränderung muss sich aus bisherigen Interaktionen, Konflikten oder gemeinsamen Erlebnissen ergeben.',
+
+        character:
+            'Der Twist soll eine überraschende Charakterentwicklung ermöglichen. Eine bestehende Eigenschaft, Erinnerung, Motivation oder Entscheidung einer Figur soll dadurch in ein neues Licht gerückt werden.',
+
+        mystery:
+            'Der Twist soll ein bestehendes Rätsel, einen Hinweis oder eine offene Frage überraschend neu interpretieren. Eine neue Information soll die bisherige Bedeutung verändern, ohne unbegründete Lore zu erfinden.',
+
+        horror:
+            'Der Twist soll eine unerwartete unheimliche oder bedrohliche Wendung erzeugen. Etwas bereits Bekanntes, Sichergeglaubtes oder scheinbar Harmloses kann dabei eine andere Bedeutung bekommen.',
+
+        conflict:
+            'Der Twist soll einen bestehenden oder entstehenden Konflikt unerwartet verändern oder verschärfen. Die Wendung soll aus den Interessen, Handlungen oder Beziehungen der beteiligten Charaktere entstehen.',
+
+        humor:
+            'Der Twist soll eine unerwartet humorvolle Wendung erzeugen, die zu den Charakteren und der bisherigen Situation passt. Der Humor darf die bestehende Charakterisierung nicht zerstören.',
+
+        worldbuilding:
+            'Der Twist soll eine überraschende Erkenntnis über die Welt, einen Ort, eine Gruppe, ihre Regeln oder ihre Geschichte liefern. Die Information muss mit dem vorhandenen Worldbuilding vereinbar sein.',
+
+        consequence:
+            'Der Twist soll eine unerwartete Konsequenz eines bereits geschehenen Ereignisses oder einer früheren Entscheidung enthüllen. Die Verbindung soll rückblickend nachvollziehbar sein.',
+
+        'story-thread':
+            'Der Twist soll einen bereits bestehenden offenen Storyfaden überraschend weiterentwickeln. Eine bisher nebensächliche Information oder ein offener Punkt kann dabei eine neue Bedeutung bekommen.',
+    };
+
+    return instructions[normalizeStoryDirectorTask(task)] || instructions.random;
 }
 
 function getStoryDirectorTaskInstruction(task) {
@@ -2469,11 +2616,11 @@ function getStoryDirectorTaskInstruction(task) {
         consequence:
             'Der Event-Vorschlag soll eine nachvollziehbare Konsequenz aus einem bereits geschehenen Ereignis oder einer bestehenden Entscheidung entwickeln.',
 
-        storythread:
+        'story-thread':
             'Der Event-Vorschlag soll einen bereits bestehenden offenen Storyfaden aufgreifen und sinnvoll weiterführen.',
     };
 
-    return instructions[task] || instructions.random;
+    return instructions[normalizeStoryDirectorTask(task)] || instructions.random;
 }
 
 window.testStoryDirectorTaskInstruction = () => {
@@ -2506,7 +2653,9 @@ function loadSuggestionSettings() {
     }
 
     try {
-        return JSON.parse(saved);
+        const settings = JSON.parse(saved);
+        if (Array.isArray(settings.slots)) settings.slots = settings.slots.map(slot => ({ ...slot, task: normalizeStoryDirectorTask(slot.task) }));
+        return settings;
     } catch (error) {
         console.warn(
             '[Story Director] Could not load suggestion settings:',

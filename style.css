@@ -533,3 +533,17 @@
         min-height: 44px;
     }
 }
+
+.story-director-direction {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 60px;
+    padding: 8px;
+    margin: 6px 0 10px;
+    resize: vertical;
+    font: inherit;
+    color: var(--SmartThemeBodyColor, #eee);
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    border-radius: 7px;
+}
