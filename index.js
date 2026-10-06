@@ -29,6 +29,35 @@ Diese Idee ist kreative Steuerung, KEINE bereits geschehene Tatsache und KEINE v
 `;
 }
 
+function getStoryDirectorOption(key, elementId) {
+    return document.getElementById(elementId)?.checked ?? loadSuggestionSettings()?.[key] ?? true;
+}
+
+function getStoryDirectorGenerationTokens(kind) {
+    const defaults = { event: 800, twist: 1400, timeskip: 1200, unstuck: 1600 };
+    const positiveTokens = value => Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
+    if (getStoryDirectorOption('customTokens', 'story-director-custom-tokens')) {
+        return positiveTokens(document.getElementById(`story-director-tokens-${kind}`)?.value)
+            ?? positiveTokens(loadSuggestionSettings()?.tokens?.[kind]) ?? defaults[kind];
+    }
+    const context = SillyTavern.getContext();
+    const service = context.ConnectionManagerRequestService;
+    const profileId = context.extensionSettings?.connectionManager?.selectedProfile;
+    let api = context.mainApi, preset;
+    try {
+        const profile = service?.getProfile?.(profileId);
+        api = service?.validateProfile?.(profile)?.selected ?? api;
+        const manager = context.getPresetManager?.(api);
+        preset = profile?.preset ? manager?.getCompletionPresetByName?.(profile.preset) : null;
+    } catch { /* Older hosts may not expose profile/preset readers. */ }
+    const value = api === 'textgenerationwebui'
+        ? positiveTokens(preset?.genamt) ?? positiveTokens(context.textCompletionSettings?.genamt)
+        : positiveTokens(preset?.openai_max_tokens) ?? positiveTokens(context.chatCompletionSettings?.openai_max_tokens);
+    // sendRequest requires a response budget. Keep the existing generic 800-token
+    // safety fallback only when the host exposes no usable generation setting.
+    return value ?? 800;
+}
+
 async function generateDirectorResponse(prompt, maxTokens, retryOnEmpty = true) {
     const context = SillyTavern.getContext();
     const connectionService =
@@ -1246,13 +1275,7 @@ async function generateEventForSlot(
     kind = 'event',
     direction = ''
 ) {
-    const tokenSelect =
-        document.getElementById(
-            `story-director-tokens-${kind}`
-        );
-
-    const maxTokens =
-        Number(tokenSelect?.value) || (kind === 'twist' ? 1400 : 800);
+    const maxTokens = getStoryDirectorGenerationTokens(kind);
 
     const taskInstruction =
         (kind === 'twist' ? getStoryDirectorTwistInstruction : getStoryDirectorTaskInstruction)(slot.task);
@@ -1275,8 +1298,15 @@ async function generateEventForSlot(
             : [];
 
     const requireDifferentSuggestions =
-        Boolean(direction.trim()) || (diversityContext?.differentSuggestions ?? true);
+        Boolean(direction.trim()) || (diversityContext?.differentSuggestions ?? true)
+            || getStoryDirectorOption('avoidRecentIdeas', 'story-director-avoid-recent');
 
+    const preferenceInstruction = [
+        getStoryDirectorOption('preferStoryThreads', 'story-director-story-threads')
+            ? 'Bevorzuge vorhandene offene Storyfäden, wenn sie im bereitgestellten Kontext belegt und für die aktuelle Situation passend sind. Erfinde keine offenen Fäden und erzwinge keine unpassende Fortsetzung.' : '',
+        getStoryDirectorOption('avoidRecentIdeas', 'story-director-avoid-recent')
+            ? 'Vermeide Wiederholungen von Ideen, Wendungen und Ereignissen aus dem verfügbaren jüngeren Chatverlauf und dieser Vorschlagsrunde. Eine ausdrücklich gewählte Storyfaden-Fortsetzung bleibt zulässig: Entwickle sie mit einer neuen Konsequenz oder Wendung weiter, statt bereits Geschehenes erneut vorzuschlagen. Erfinde keine nicht verfügbare Ideen-Historie.' : '',
+    ].filter(Boolean).join('\n');
     let diversityInstruction = '';
 
     if (requireDifferentSuggestions && previousSuggestions.length) {
@@ -1312,6 +1342,7 @@ ${formattedContext}
 
 ${taskInstruction}
 ${getStoryDirectorDirectionInstruction(direction)}
+${preferenceInstruction}
 ${diversityInstruction}
 
 === AUFGABE ===
@@ -1379,6 +1410,7 @@ ${formattedContext}
 
 ${taskInstruction}
 ${getStoryDirectorDirectionInstruction(direction)}
+${preferenceInstruction}
 ${diversityInstruction}
 
 === REGELN FÜR DEN TWIST ===
@@ -1484,7 +1516,8 @@ async function generateStoryDirectorEvents(kind = 'event', direction = document.
         );
 
     const differentSuggestions =
-        Boolean(direction.trim()) || (document.getElementById('story-director-different')?.checked ?? true);
+        Boolean(direction.trim()) || getStoryDirectorOption('differentSuggestions', 'story-director-different')
+            || getStoryDirectorOption('avoidRecentIdeas', 'story-director-avoid-recent');
 
     const results = [];
     const previousSuggestions = [];
@@ -1535,11 +1568,7 @@ async function generateStoryDirectorEvents(kind = 'event', direction = document.
 }
 
 async function generateStoryDirectorUnstuck() {
-    const tokenSelect =
-        document.getElementById('story-director-tokens-unstuck');
-
-    const maxTokens =
-        Number(tokenSelect?.value) || 1600;
+    const maxTokens = getStoryDirectorGenerationTokens('unstuck');
 
     const storyContext =
         await getStoryDirectorContext({
@@ -1886,10 +1915,7 @@ async function openStoryDirectorTimeSkipDialog() {
 
         dialog.close();
 
-        const tokenSelect =
-            document.getElementById('story-director-tokens-timeskip');
-
-        const maxTokens = Number(tokenSelect?.value) || 1200;
+        const maxTokens = getStoryDirectorGenerationTokens('timeskip');
 
         const storyContext =
             await getStoryDirectorContext({ chatLimit: 100 });
@@ -2367,48 +2393,48 @@ if (savedSettings) {
     if (avoidRecentIdeas) {
         avoidRecentIdeas.checked =
             savedSettings.avoidRecentIdeas ?? true;
+    }
 
-        const customTokens =
-            panel.querySelector('#story-director-custom-tokens');
+    const customTokens =
+        panel.querySelector('#story-director-custom-tokens');
 
-        if (customTokens) {
-            customTokens.checked =
-                savedSettings.customTokens ?? true;
-        }
+    if (customTokens) {
+        customTokens.checked =
+            savedSettings.customTokens ?? true;
+    }
 
-        const tokenSettings = savedSettings.tokens ?? {};
+    const tokenSettings = savedSettings.tokens ?? {};
 
-        const eventTokens =
-            panel.querySelector('#story-director-tokens-event');
+    const eventTokens =
+        panel.querySelector('#story-director-tokens-event');
 
-        const twistTokens =
-            panel.querySelector('#story-director-tokens-twist');
+    const twistTokens =
+        panel.querySelector('#story-director-tokens-twist');
 
-        const timeskipTokens =
-            panel.querySelector('#story-director-tokens-timeskip');
+    const timeskipTokens =
+        panel.querySelector('#story-director-tokens-timeskip');
 
-        const unstuckTokens =
-            panel.querySelector('#story-director-tokens-unstuck');
+    const unstuckTokens =
+        panel.querySelector('#story-director-tokens-unstuck');
 
-        if (eventTokens) {
-            eventTokens.value =
-                String(tokenSettings.event ?? 800);
-        }
+    if (eventTokens) {
+        eventTokens.value =
+            String(tokenSettings.event ?? 800);
+    }
 
-        if (twistTokens) {
-            twistTokens.value =
-                String(tokenSettings.twist ?? 1400);
-        }
+    if (twistTokens) {
+        twistTokens.value =
+            String(tokenSettings.twist ?? 1400);
+    }
 
-        if (timeskipTokens) {
-            timeskipTokens.value =
-                String(tokenSettings.timeskip ?? 1200);
-        }
+    if (timeskipTokens) {
+        timeskipTokens.value =
+            String(tokenSettings.timeskip ?? 1200);
+    }
 
-        if (unstuckTokens) {
-            unstuckTokens.value =
-                String(tokenSettings.unstuck ?? 1600);
-        }
+    if (unstuckTokens) {
+        unstuckTokens.value =
+            String(tokenSettings.unstuck ?? 1600);
     }
 } else {
     renderSlots();
