@@ -58,121 +58,83 @@ function getStoryDirectorGenerationTokens(kind) {
     return value ?? 800;
 }
 
+function directorError(code, message) {
+    const error = new Error(message);
+    error.directorCode = code;
+    return error;
+}
+
+function directorDiagnostic(result, maxTokens) {
+    const payload = (typeof result?.data === 'object' && result.data) || (typeof result?.response === 'object' && result.response) || result;
+    const reason = payload?.choices?.[0]?.finish_reason ?? payload?.finish_reason ?? payload?.done_reason;
+    const usage = payload?.usage;
+    const numeric = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+    return {
+        requestedTokens: maxTokens,
+        finishReason: ['length', 'stop', 'content_filter', 'max_tokens'].includes(reason) ? reason : 'unknown',
+        promptTokens: numeric(usage?.prompt_tokens ?? payload?.prompt_eval_count),
+        completionTokens: numeric(usage?.completion_tokens ?? payload?.eval_count),
+    };
+}
+
 async function generateDirectorResponse(prompt, maxTokens, retryOnEmpty = true) {
     const context = SillyTavern.getContext();
-    const connectionService =
-        context.ConnectionManagerRequestService;
-
-    const profileId =
-        context.extensionSettings?.connectionManager?.selectedProfile;
-
-    if (!profileId) {
-        throw new Error(
-            '[Story Director] Kein aktives Connection Profile gefunden.'
-        );
+    const service = context.ConnectionManagerRequestService;
+    const profileId = context.extensionSettings?.connectionManager?.selectedProfile;
+    if (!profileId || !service?.sendRequest) {
+        throw directorError('connection', 'Kein verfügbares Connection Profile. Bitte die SillyTavern-Verbindung prüfen.');
     }
-
-    const extractResponseText = (result) => {
-        if (typeof result === 'string' && result.trim()) {
-            return result.trim();
+    const request = async requestPrompt => {
+        let result;
+        try {
+            // Preserve provider metadata: extracted responses discard finish_reason/usage.
+            // Never apply unsupported reasoning parameters to the main profile.
+            result = await service.sendRequest(profileId, requestPrompt, maxTokens, {
+                stream: false, extractData: false,
+            });
+        } catch {
+            throw directorError('request', 'API-Anfrage fehlgeschlagen. Bitte Verbindung, Modell, Zugang und Anbieterstatus prüfen.');
         }
-
-        const candidates = [
-            result?.content,
-            result?.text,
-            result?.response?.content,
-            result?.response?.text,
-            result?.message?.content,
-            result?.choices?.[0]?.message?.content,
-            result?.choices?.[0]?.text,
-            result?.data?.content,
-            result?.data?.text,
-        ];
-
-        for (const candidate of candidates) {
-            if (typeof candidate === 'string' && candidate.trim()) {
-                return candidate.trim();
-            }
+        const diagnostic = directorDiagnostic(result, maxTokens);
+        console.info?.('[Story Director] Antwortdiagnose:', diagnostic);
+        const payload = (typeof result?.data === 'object' && result.data) || (typeof result?.response === 'object' && result.response) || result;
+        if (['length', 'max_tokens'].includes(diagnostic.finishReason)) {
+            throw directorError('length', 'Ausgabe vom Anbieter am Tokenlimit abgebrochen (finish_reason=length). Angefordert: '
+                + maxTokens + ' Tokens; Eingabe: ' + (diagnostic.promptTokens ?? 'unbekannt')
+                + '; Ausgabe: ' + (diagnostic.completionTokens ?? 'unbekannt')
+                + '. Ausgabegrenze erhöhen oder Kontext/Thinking im Anbieterprofil reduzieren.');
         }
-
-        return null;
+        if (diagnostic.finishReason === 'content_filter') {
+            throw directorError('filter', 'Der Anbieter hat die Ausgabe gefiltert. Bitte Slotrichtung oder Anbieterprofil prüfen.');
+        }
+        const candidates = [typeof result === 'string' ? result : null, payload?.content, payload?.text, payload?.response,
+            payload?.message?.content, payload?.choices?.[0]?.message?.content, payload?.choices?.[0]?.text];
+        return candidates.find(value => typeof value === 'string' && value.trim())?.trim() ?? '';
     };
-
-    const request = async (requestPrompt, requestTokens) => {
-        const result = await connectionService.sendRequest(
-            profileId,
-            requestPrompt,
-            requestTokens,
-            {
-                stream: false,
-                extractData: true,
-            },
-            {
-                reasoning_effort: 'low',
-            }
-        );
-
-        console.log(
-            '[Story Director] RAW API RESULT:',
-            result
-        );
-
-        console.log(
-            '[Story Director] CONTENT CHECK:',
-            typeof result?.content,
-            Boolean(result?.content),
-            result?.content
-        );
-
-        const text = extractResponseText(result);
-
-        if (text) {
-            return text;
-        }
-
-        return {
-            empty: true,
-            hasReasoning: Boolean(result?.reasoning),
-            raw: result,
-        };
-    };
-
-    try {
-        const firstAttempt = await request(prompt, maxTokens);
-
-        if (typeof firstAttempt === 'string') {
-            return firstAttempt;
-        }
-
-        // Manche Modelle liefern gelegentlich nur einen Reasoning-Block und
-        // kein finales content-Feld. Ein einzelner kompakter Retry verhindert,
-        // dass dadurch der komplette Event-Lauf abbricht.
-        if (retryOnEmpty && firstAttempt?.empty) {
-            console.warn(
-                '[Story Director] Leere Antwort erhalten – kompakter Retry wird versucht.'
-            );
-
-            const retryPrompt = `${prompt}\n\n=== WICHTIGER AUSGABEBEFEHL ===\nGib jetzt ausschließlich die fertige Antwort aus. Keine Analyse, kein Reasoning, keine Vorüberlegungen und keine Meta-Erklärung. Beginne direkt mit dem verlangten Titel bzw. Ergebnis.`;
-
-            const retryTokens = Math.min(Number(maxTokens) || 800, 1000);
-            const secondAttempt = await request(retryPrompt, retryTokens);
-
-            if (typeof secondAttempt === 'string') {
-                return secondAttempt;
-            }
-        }
-
-        throw new Error(
-            '[Story Director] Die KI hat keinen Text zurückgegeben.'
-        );
-    } catch (error) {
-        console.error(
-            '[Story Director] Generation failed:',
-            error
-        );
-
-        throw error;
+    let text = await request(prompt);
+    if (!text && retryOnEmpty) {
+        // Retry retains the user's budget, including budgets above 1000 tokens.
+        text = await request(prompt + '\nGib ausschließlich die fertige Antwort aus, ohne Analyse oder Reasoning.');
     }
+    if (!text) throw directorError('empty', 'Kein fertiger Antworttext erhalten; eventuell nur Thinking. Angefordert: '
+        + maxTokens + ' Tokens. Ein Modell mit weniger Thinking wählen oder dessen Ausgabegrenze prüfen.');
+    return text;
+}
+
+function parseDirectorSuggestion(response) {
+    // Remove only explicit reasoning blocks and separately headed commentary.
+    const cleaned = response.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    if (/<\/?think>/i.test(cleaned)) throw directorError('format', 'Die Antwort enthält unvollständiges Thinking.');
+    const lines = cleaned.split('\n');
+    if (/^#\s+/.test(lines[0] ?? '')) lines.shift();
+    const body = lines.join('\n').split(/\n\s*(?:#{1,6}\s+|(?:Begründung|Warum|Bewertung|Alternativen|Alternative Ideen|Fragen|Folgefragen)\s*:)/i)[0].trim();
+    const sentences = body.match(/[^.!?]+[.!?]+(?:["»“”])?(?=\s|$)/g) ?? [];
+    if (body.includes('?') || /(?:^|\n)\s*(?:[-*]|\d+[.)])\s/.test(body)
+        || /(?:Begründung|Meta-Kommentar|Alternative Idee|Möchtest du|Soll ich|Dieser Twist passt|Dieses Event passt)/i.test(body)
+        || sentences.length < 2 || sentences.length > 4 || !/[.!]["»“”]?$/.test(body)) {
+        throw directorError('format', 'Kein gültiger Vorschlag: erwartet wird genau eine konkrete Idee in 2–4 Sätzen, ohne Bewertung, Alternativen oder Fragen. Bitte erneut erzeugen.');
+    }
+    return body;
 }
 
 window.testStoryDirectorConnection = async () => {
@@ -971,9 +933,10 @@ function createStoryDirectorPanel() {
                 id="story-director-custom-tokens"
                 checked
             >
-            <span>Director verwendet eigene Antwortlängen</span>
+            <span>Director verwendet eigene Ausgabegrenzen (Tokens)</span>
         </label>
 
+        <p>Positive ganze Zahl frei eingeben. Die Grenze gilt auch beim zweiten Versuch; bei manchen Modellen verbraucht Thinking einen Teil davon. Anbietergrenzen bleiben bestehen.</p>
         <div class="story-director-token-settings">
 
             <div class="story-director-token-setting">
@@ -984,16 +947,7 @@ function createStoryDirectorPanel() {
                     🎲 Event
                 </label>
 
-                <select
-                    id="story-director-tokens-event"
-                    class="story-director-select"
-                >
-                    <option value="500">500 Tokens</option>
-                    <option value="800" selected>800 Tokens</option>
-                    <option value="1200">1200 Tokens</option>
-                    <option value="1600">1600 Tokens</option>
-                    <option value="2000">2000 Tokens</option>
-                </select>
+                <input type="number" min="1" step="1" inputmode="numeric" id="story-director-tokens-event" class="story-director-select" value="800" aria-label="Ausgabegrenze in Tokens">
             </div>
 
             <div class="story-director-token-setting">
@@ -1004,16 +958,7 @@ function createStoryDirectorPanel() {
                     🌀 Twist
                 </label>
 
-                <select
-                    id="story-director-tokens-twist"
-                    class="story-director-select"
-                >
-                    <option value="800">800 Tokens</option>
-                    <option value="1200">1200 Tokens</option>
-                    <option value="1400" selected>1400 Tokens</option>
-                    <option value="1600">1600 Tokens</option>
-                    <option value="2000">2000 Tokens</option>
-                </select>
+                <input type="number" min="1" step="1" inputmode="numeric" id="story-director-tokens-twist" class="story-director-select" value="1400" aria-label="Ausgabegrenze in Tokens">
             </div>
 
             <div class="story-director-token-setting">
@@ -1024,15 +969,7 @@ function createStoryDirectorPanel() {
                     ⏩ Time Skip
                 </label>
 
-                <select
-                    id="story-director-tokens-timeskip"
-                    class="story-director-select"
-                >
-                    <option value="800">800 Tokens</option>
-                    <option value="1200" selected>1200 Tokens</option>
-                    <option value="1600">1600 Tokens</option>
-                    <option value="2000">2000 Tokens</option>
-                </select>
+                <input type="number" min="1" step="1" inputmode="numeric" id="story-director-tokens-timeskip" class="story-director-select" value="1200" aria-label="Ausgabegrenze in Tokens">
             </div>
 
             <div class="story-director-token-setting">
@@ -1043,16 +980,7 @@ function createStoryDirectorPanel() {
                     🆘 Story retten
                 </label>
 
-                <select
-                    id="story-director-tokens-unstuck"
-                    class="story-director-select"
-                >
-                    <option value="1000">1000 Tokens</option>
-                    <option value="1400">1400 Tokens</option>
-                    <option value="1600" selected>1600 Tokens</option>
-                    <option value="2000">2000 Tokens</option>
-                    <option value="2500">2500 Tokens</option>
-                </select>
+                <input type="number" min="1" step="1" inputmode="numeric" id="story-director-tokens-unstuck" class="story-director-select" value="1600" aria-label="Ausgabegrenze in Tokens">
             </div>
 
         </div>
@@ -1385,8 +1313,8 @@ WICHTIGE REGELN:
 - Der Vorschlag soll eine konkrete Idee liefern, die der Spieler anschließend
   selbst in der RPG-Szene umsetzen kann.
 - Verwende einen passenden Titel für das Event.
-- Halte den Vorschlag bei ungefähr 80–150 Wörtern.
-- Schreibe maximal 2 kurze Absätze.
+- Schreibe genau eine konkrete, spielbare Idee in 2–4 Sätzen.
+- Keine Begründung, Meta-Bewertung, Alternativen oder Folgefragen.
 - Vermeide unnötige Wiederholungen bereits geschehener Ereignisse.
 
 FORMAT:
@@ -1433,8 +1361,8 @@ ${diversityInstruction}
 - Schreibe keine Liste mehrerer Twists.
 - Schreibe auf Deutsch.
 - Formuliere einen konkreten Regie-Vorschlag.
-- Halte den Vorschlag ungefähr bei 80–150 Wörtern.
-- Schreibe maximal 2 kurze Absätze.
+- Schreibe genau eine konkrete, spielbare Idee in 2–4 Sätzen.
+- Keine Begründung, Meta-Bewertung, Alternativen oder Folgefragen.
 
 WICHTIG:
 
@@ -1453,19 +1381,7 @@ FORMAT:
 `;
 
     const prompt = kind === 'twist' ? twistPrompt : eventPrompt;
-    const response =
-        await generateDirectorResponse(prompt, maxTokens);
-
-    console.log(
-        '[Story Director] Suggestion slot generated:',
-        {
-            slot: slot.slot,
-            task: slot.task,
-            response,
-            previousSuggestionCount: previousSuggestions.length,
-            differentSuggestions: requireDifferentSuggestions,
-        }
-    );
+    const response = parseDirectorSuggestion(await generateDirectorResponse(prompt, maxTokens));
 
     return {
         slot: slot.slot,
@@ -1546,23 +1462,20 @@ async function generateStoryDirectorEvents(kind = 'event', direction = document.
             // alle bereits erfolgreich erzeugten Slots zerstören.
             console.warn(
                 `[Story Director] Slot ${slot.slot} konnte nicht erzeugt werden. Der nächste Slot wird trotzdem versucht.`,
-                error
+                { code: error?.directorCode ?? 'unknown' }
             );
 
             results.push({
                 slot: slot.slot,
                 task: slot.task,
                 label: getStoryDirectorTaskLabel(slot.task),
-                response: 'Für diesen Slot konnte momentan kein Vorschlag erzeugt werden. Die übrigen Slots wurden weiter generiert.',
+                response: error?.directorCode ? error.message : 'Vorschlag fehlgeschlagen. Bitte Verbindung und Anbieterprofil prüfen.',
                 failed: true,
             });
         }
     }
 
-    console.log(
-        '[Story Director] All event slots processed:',
-        results
-    );
+
 
     return results;
 }
@@ -2441,6 +2354,13 @@ if (savedSettings) {
 }
 }
 function saveSuggestionSettings(slotCountSelect, slotsContainer) {
+    for (const kind of ['event', 'twist', 'timeskip', 'unstuck']) {
+        const input = document.getElementById(`story-director-tokens-${kind}`);
+        if (!input) continue;
+        const valid = Number.isSafeInteger(Number(input.value)) && Number(input.value) > 0;
+        input.setCustomValidity?.(valid ? '' : 'Bitte eine positive ganze Tokenzahl eingeben.');
+        if (!valid) { input.reportValidity?.(); return; }
+    }
     const settings = {
         slotCount: Number(slotCountSelect.value),
         slots: [],

@@ -1,0 +1,38 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const calls=[], logs=[];
+let responses=[];
+const settings={tokens:{event:3456},customTokens:true,slots:[{slot:1,task:'conflict'},{slot:2,task:'negative'}],slotCount:2};
+const context={extensionSettings:{connectionManager:{selectedProfile:'main'}},ConnectionManagerRequestService:{sendRequest:async(...args)=>{calls.push(args);const value=responses.shift();if(value instanceof Error)throw value;return value;}}};
+const sandbox={window:{},console:{log:(...v)=>logs.push(v),info:(...v)=>logs.push(v),warn:(...v)=>logs.push(v),error:(...v)=>logs.push(v)},document:{getElementById:()=>null},localStorage:{getItem:()=>JSON.stringify(settings)},SillyTavern:{getContext:()=>context}};
+vm.createContext(sandbox);
+const source=fs.readFileSync(new URL('../index.js',import.meta.url),'utf8');
+vm.runInContext(source.replace('export async function init()','async function init()'),sandbox);
+const run=code=>vm.runInContext(code,sandbox);
+assert.equal(run("getStoryDirectorGenerationTokens('event')"),3456);
+responses=[{choices:[{message:{content:''},finish_reason:'stop'}]},{choices:[{message:{content:'SAFE FINAL'},finish_reason:'stop'}]}];
+assert.equal(await run("generateDirectorResponse('PRIVATE PROMPT',3456)"),'SAFE FINAL');
+assert.deepEqual(calls.map(v=>v[2]),[3456,3456]);
+assert.equal(calls[0][3].extractData,false);assert.equal(calls[0].length,4);
+responses=[{choices:[{message:{content:'TRUNCATED SECRET'},finish_reason:'length'}],usage:{prompt_tokens:151036,completion_tokens:1000}}];
+await assert.rejects(run("generateDirectorResponse('PRIVATE',1600)"),e=>e.directorCode==='length'&&e.message.includes('151036')&&e.message.includes('1000')&&e.message.includes('1600'));
+assert.equal(responses.length,0);
+responses=[{message:{content:''},done_reason:'length',prompt_eval_count:900,eval_count:800}];
+await assert.rejects(run("generateDirectorResponse('PRIVATE',800)"),e=>e.directorCode==='length');
+for(const value of ['plain',{content:'extracted'},{response:'native'},{data:{choices:[{text:'nested'}]}}]){responses=[value];assert.ok(await run("generateDirectorResponse('PRIVATE',500)"));}
+responses=[{reasoning:'SECRET THINKING'},{reasoning:'SECRET THINKING'}];
+await assert.rejects(run("generateDirectorResponse('PRIVATE',500)"),e=>e.directorCode==='empty');
+responses=[new Error('SECRET KEY provider dump')];
+await assert.rejects(run("generateDirectorResponse('PRIVATE',500)"),e=>e.directorCode==='request'&&!e.message.includes('SECRET'));
+sandbox.input='# Titel\nEine Nachricht trifft ein. Sie enthüllt einen bestehenden Konflikt.\n\n## Begründung\nSECRET META';
+assert.equal(run('parseDirectorSuggestion(input)'),'Eine Nachricht trifft ein. Sie enthüllt einen bestehenden Konflikt.');
+for(const input of ['Nur ein Satz.','Eine Idee. Möchtest du mehr?','- Idee eins.\n- Idee zwei.','<think>unfinished','Eine Idee. Dieser Twist passt zur Geschichte.']){sandbox.input=input;assert.throws(()=>run('parseDirectorSuggestion(input)'));}
+sandbox.input='<think>SECRET THINKING</think>Eine Nachricht trifft ein. Sie verändert den Konflikt.';assert.ok(run('parseDirectorSuggestion(input)').startsWith('Eine Nachricht'));
+vm.runInContext("getStoryDirectorContext=async()=>({chat:[],lore:[]});",sandbox);
+responses=[{choices:[{finish_reason:'length',message:{content:'SECRET PARTIAL'}}]},{content:'Eine Nachricht trifft ein. Sie verändert den Konflikt.'}];
+const slots=await run("generateStoryDirectorEvents('twist')");assert.equal(slots[0].failed,true);assert.ok(slots[0].response.includes('length'));assert.ok(!slots[1].failed);
+assert.ok(!JSON.stringify(logs).includes('SECRET'));assert.ok(!JSON.stringify(logs).includes('PRIVATE'));assert.ok(!JSON.stringify(logs).includes('SAFE FINAL'));
+assert.equal(context.extensionSettings.connectionManager.selectedProfile,'main');
+assert.equal((source.match(/type="number" min="1" step="1" inputmode="numeric"/g)||[]).length,4);
+console.log('PASS: raw/extracted/native responses, free budget, unchanged retry budget, length/empty/request diagnostics, strict parser, isolated slot failures, no content/secrets logged, main profile unchanged.');
