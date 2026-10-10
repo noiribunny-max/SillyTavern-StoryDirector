@@ -1036,94 +1036,91 @@ function setupCloseButton(toggle, panel) {
 }
 
 function setupDragging(toggle, panel) {
-    setupDraggable(toggle);
-    setupDraggable(panel, panel.querySelector('.story-director-header'));
+    const cleanups = [setupDraggable(toggle), setupDraggable(panel, panel.querySelector('.story-director-header'))];
+    const observer = new MutationObserver(() => {
+        if (!toggle.isConnected || !panel.isConnected) cleanup();
+    });
+    function cleanup() {
+        observer.disconnect();
+        cleanups.forEach(dispose => dispose());
+    }
+    observer.observe(document.body, { childList: true, subtree: true });
+    return cleanup;
 }
 
 function setupDraggable(element, handle = element) {
-    let dragging = false;
-    let moved = false;
-
-    let startPointerX = 0;
-    let startPointerY = 0;
-
-    let startLeft = 0;
-    let startTop = 0;
-
-    handle.addEventListener('pointerdown', event => {
-        if (event.button !== undefined && event.button !== 0) {
-            return;
+    const isToggle = element.id === 'story-director-toggle';
+    const cleanups = [];
+    let active = null, frame = null, pending = null;
+    function listen(target, type, fn) {
+        target.addEventListener(type, fn);
+        cleanups.push(() => target.removeEventListener(type, fn));
+    }
+    function flush() {
+        if (frame !== null) window.cancelAnimationFrame(frame);
+        frame = null;
+        if (!active || !pending) return;
+        // Measure once per gesture; moves only write the latest coordinates.
+        const left = Math.max(0, Math.min(active.left + pending.x - active.x, Math.max(0, window.innerWidth - active.width)));
+        const top = Math.max(0, Math.min(active.top + pending.y - active.y, Math.max(0, window.innerHeight - active.height)));
+        element.style.left = `${left}px`;
+        element.style.top = `${top}px`;
+        pending = null;
+    }
+    function update(event) {
+        if (active?.id !== event.pointerId) return;
+        if (Math.abs(event.clientX - active.x) > 4 || Math.abs(event.clientY - active.y) > 4) {
+            active.moved = true;
+            if (isToggle) element.dataset.wasDragged = 'true';
         }
-
-        dragging = true;
-        moved = false;
-
-        startPointerX = event.clientX;
-        startPointerY = event.clientY;
-
+        if (!active.moved) return;
+        pending = { x: event.clientX, y: event.clientY };
+        if (frame === null) frame = window.requestAnimationFrame(flush);
+    }
+    function finish(commit = false, event = null) {
+        if (!active || (event && event.pointerId !== active.id)) return;
+        if (commit && event) update(event);
+        flush();
+        const previous = active;
+        active = null;
+        pending = null;
+        // Clear state before release: lostpointercapture may fire synchronously.
+        try {
+            if (handle.hasPointerCapture?.(previous.id)) handle.releasePointerCapture(previous.id);
+        } catch { /* Capture can already be gone after cancellation or removal. */ }
+        if (commit && previous.moved) {
+            snapToEdge(element);
+            try { saveHudPosition(element); }
+            catch { console.warn('[Story Director] Could not save HUD position.'); }
+        }
+    }
+    listen(handle, 'pointerdown', event => {
+        if (active || event.isPrimary === false || (event.button !== undefined && event.button !== 0)) return;
+        const control = event.target.closest?.('button, input, textarea, select, a, [contenteditable="true"]');
+        if (control && control !== element) return;
         const rect = element.getBoundingClientRect();
-
-        startLeft = rect.left;
-        startTop = rect.top;
-
-        element.style.left = `${startLeft}px`;
-        element.style.top = `${startTop}px`;
+        active = { id: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top, width: rect.width, height: rect.height, moved: false };
+        element.style.left = `${rect.left}px`;
+        element.style.top = `${rect.top}px`;
         element.style.right = 'auto';
-
-        if (element === toggle) {
-            toggle.dataset.wasDragged = 'false';
-        }
-
-        handle.setPointerCapture?.(event.pointerId);
+        if (isToggle) element.dataset.wasDragged = 'false';
+        try { handle.setPointerCapture?.(event.pointerId); }
+        catch { /* Window listeners also support failed/unavailable capture. */ }
     });
-
-    handle.addEventListener('pointermove', event => {
-        if (!dragging) {
-            return;
-        }
-
-        const deltaX = event.clientX - startPointerX;
-        const deltaY = event.clientY - startPointerY;
-
-        if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
-            moved = true;
-        }
-
-        let newLeft = startLeft + deltaX;
-        let newTop = startTop + deltaY;
-
-        const rect = element.getBoundingClientRect();
-
-        const maxLeft = window.innerWidth - rect.width;
-        const maxTop = window.innerHeight - rect.height;
-
-        newLeft = Math.max(0, Math.min(newLeft, maxLeft));
-        newTop = Math.max(0, Math.min(newTop, maxTop));
-
-        element.style.left = `${newLeft}px`;
-        element.style.top = `${newTop}px`;
-
-        if (element === toggle && moved) {
-            toggle.dataset.wasDragged = 'true';
-        }
+    // Window fallback keeps fast movements outside the small handle connected.
+    listen(window, 'pointermove', event => {
+        if (active?.id !== event.pointerId) return;
+        if (event.pointerType === 'mouse' && event.buttons === 0) { finish(false, event); return; }
+        event.preventDefault();
+        update(event);
     });
-
-    handle.addEventListener('pointerup', event => {
-        if (!dragging) {
-            return;
-        }
-
-        dragging = false;
-
-        handle.releasePointerCapture?.(event.pointerId);
-
-        snapToEdge(element);
-        saveHudPosition(element);
-    });
-
-    handle.addEventListener('pointercancel', () => {
-        dragging = false;
-    });
+    listen(window, 'pointerup', event => finish(true, event));
+    listen(window, 'pointercancel', event => finish(false, event));
+    listen(handle, 'lostpointercapture', event => finish(false, event));
+    listen(window, 'blur', () => finish());
+    listen(document, 'visibilitychange', () => { if (document.hidden) finish(); });
+    listen(handle, 'dragstart', event => event.preventDefault());
+    return () => { finish(); cleanups.splice(0).forEach(dispose => dispose()); };
 }
 
 function snapToEdge(element) {
