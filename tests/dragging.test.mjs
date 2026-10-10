@@ -37,12 +37,12 @@ test('fast mouse moves use capture and one latest-position write per frame witho
     assert.equal(f.reads, 1); assert.equal(f.element.dataset.wasDragged, 'true');
     f.win.emit('pointerup', { clientX: 720, clientY: 300 });
     assert.equal(f.frameCount, 0); assert.equal(f.captured, null); assert.equal(f.saves.length, 1);
-    assert.deepEqual(f.saves[0], { key: 'story-director-hud-position', value: { left: 736, top: 300 } });
+    assert.deepEqual(f.saves[0], { key: 'story-director-hud-position', value: { left: 720, top: 300 } });
     f.tick(); assert.equal(f.element.style.top, '300px');
     f.element.style.top = '0px'; vm.runInContext('restoreHudPosition(element, null)', f.sandbox);
     assert.equal(f.element.style.top, '300px');
 });
-test('touch gestures ignore other pointers and preserve mobile snapping and bounds', () => {
+test('touch gestures ignore other pointers and clamp only to viewport bounds', () => {
     const f = fixture({ width: 390, height: 844 });
     f.element.emit('pointerdown', { pointerType: 'touch' });
     f.element.emit('pointerdown', { pointerId: 2, isPrimary: false });
@@ -51,7 +51,57 @@ test('touch gestures ignore other pointers and preserve mobile snapping and boun
     f.win.emit('pointermove', { pointerType: 'touch', clientX: 999, clientY: 999 }); f.tick();
     assert.equal(f.element.style.left, '338px'); assert.equal(f.element.style.top, '792px');
     f.win.emit('pointerup', { pointerType: 'touch', clientX: 999, clientY: 999 });
-    assert.deepEqual(f.saves[0].value, { left: 330, top: 784 });
+    assert.deepEqual(f.saves[0].value, { left: 338, top: 792 });
+});
+for (const pointerType of ['mouse', 'touch']) {
+    test(`${pointerType} releases at the exact screen center and reload restores it without docking`, () => {
+        const f = fixture();
+        f.element.emit('pointerdown', { pointerType });
+        f.win.emit('pointermove', { pointerType, clientX: 374, clientY: 274 });
+        f.tick();
+        assert.equal(f.element.style.left, '374px'); assert.equal(f.element.style.top, '274px');
+        f.win.emit('pointerup', { pointerType, clientX: 374, clientY: 274 });
+        assert.deepEqual(f.saves[0].value, { left: 374, top: 274 });
+        assert.equal(f.element.style.left, '374px'); assert.equal(f.element.style.top, '274px');
+        f.element.style.left = '0px'; f.element.style.top = '0px';
+        vm.runInContext('restoreHudPosition(element, null)', f.sandbox);
+        assert.equal(f.element.style.left, '374px'); assert.equal(f.element.style.top, '274px');
+        assert.equal(f.saves.length, 1);
+    });
+}
+test('release before the next frame saves final fractional coordinates, including positions near edges', () => {
+    const f = fixture();
+    f.element.emit('pointerdown'); f.win.emit('pointermove', { clientX: 300, clientY: 300 });
+    f.win.emit('pointerup', { clientX: 1.5, clientY: 7.25 });
+    assert.deepEqual(f.saves[0].value, { left: 1.5, top: 7.25 });
+    assert.equal(f.frameCount, 0); f.tick(); assert.equal(f.element.style.left, '1.5px');
+    f.element.emit('pointerdown'); f.win.emit('pointerup', { clientX: -999, clientY: -999 });
+    assert.deepEqual(f.saves.at(-1).value, { left: 0, top: 0 });
+});
+test('touch uses the visible viewport and reload clamps only coordinates outside a smaller screen', () => {
+    const f = fixture();
+    f.win.visualViewport = { offsetLeft: 20, offsetTop: 30, width: 390, height: 300 };
+    f.element.emit('pointerdown', { pointerType: 'touch' });
+    f.win.emit('pointerup', { pointerType: 'touch', clientX: 999, clientY: 999 });
+    assert.deepEqual(f.saves[0].value, { left: 358, top: 278 });
+    f.win.visualViewport.width = 250; f.win.visualViewport.height = 200;
+    vm.runInContext('restoreHudPosition(element, null)', f.sandbox);
+    assert.equal(f.element.style.left, '218px'); assert.equal(f.element.style.top, '178px');
+    f.win.visualViewport = undefined; f.win.innerWidth = 30; f.win.innerHeight = 40;
+    vm.runInContext('restoreHudPosition(element, null)', f.sandbox);
+    assert.equal(f.element.style.left, '0px'); assert.equal(f.element.style.top, '0px');
+});
+test('toggle hover/pressed scaling cannot shift saved or restored coordinates', () => {
+    const f = fixture();
+    Object.defineProperties(f.element, {
+        offsetLeft: { get: () => parseFloat(f.element.style.left) }, offsetTop: { get: () => parseFloat(f.element.style.top) },
+        offsetWidth: { value: 52 }, offsetHeight: { value: 52 }
+    });
+    f.element.getBoundingClientRect = () => ({ left: f.element.offsetLeft + 1, top: f.element.offsetTop + 1, width: 50, height: 50 });
+    f.element.emit('pointerdown'); f.win.emit('pointerup', { clientX: 374, clientY: 274 });
+    assert.deepEqual(f.saves[0].value, { left: 374, top: 274 });
+    vm.runInContext('restoreHudPosition(element, null)', f.sandbox);
+    assert.equal(f.element.style.left, '374px'); assert.equal(f.element.style.top, '274px');
 });
 test('failed capture still tracks outside the handle and a simple tap opens the panel without saving', () => {
     const f = fixture({ captureFails: true });

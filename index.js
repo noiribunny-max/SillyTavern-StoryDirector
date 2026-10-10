@@ -1061,8 +1061,7 @@ function setupDraggable(element, handle = element) {
         frame = null;
         if (!active || !pending) return;
         // Measure once per gesture; moves only write the latest coordinates.
-        const left = Math.max(0, Math.min(active.left + pending.x - active.x, Math.max(0, window.innerWidth - active.width)));
-        const top = Math.max(0, Math.min(active.top + pending.y - active.y, Math.max(0, window.innerHeight - active.height)));
+        const { left, top } = boundedHudPosition(active.left + pending.x - active.x, active.top + pending.y - active.y, active.width, active.height);
         element.style.left = `${left}px`;
         element.style.top = `${top}px`;
         pending = null;
@@ -1089,7 +1088,6 @@ function setupDraggable(element, handle = element) {
             if (handle.hasPointerCapture?.(previous.id)) handle.releasePointerCapture(previous.id);
         } catch { /* Capture can already be gone after cancellation or removal. */ }
         if (commit && previous.moved) {
-            snapToEdge(element);
             try { saveHudPosition(element); }
             catch { console.warn('[Story Director] Could not save HUD position.'); }
         }
@@ -1099,9 +1097,12 @@ function setupDraggable(element, handle = element) {
         const control = event.target.closest?.('button, input, textarea, select, a, [contenteditable="true"]');
         if (control && control !== element) return;
         const rect = element.getBoundingClientRect();
-        active = { id: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top, width: rect.width, height: rect.height, moved: false };
-        element.style.left = `${rect.left}px`;
-        element.style.top = `${rect.top}px`;
+        // Offset coordinates ignore the toggle's transient hover/pressed scale.
+        const left = Number.isFinite(element.offsetLeft) ? element.offsetLeft : rect.left;
+        const top = Number.isFinite(element.offsetTop) ? element.offsetTop : rect.top;
+        active = { id: event.pointerId, x: event.clientX, y: event.clientY, left, top, width: element.offsetWidth || rect.width, height: element.offsetHeight || rect.height, moved: false };
+        element.style.left = `${left}px`;
+        element.style.top = `${top}px`;
         element.style.right = 'auto';
         if (isToggle) element.dataset.wasDragged = 'false';
         try { handle.setPointerCapture?.(event.pointerId); }
@@ -1123,39 +1124,21 @@ function setupDraggable(element, handle = element) {
     return () => { finish(); cleanups.splice(0).forEach(dispose => dispose()); };
 }
 
-function snapToEdge(element) {
-    const rect = element.getBoundingClientRect();
-
-    const distanceLeft = rect.left;
-    const distanceRight = window.innerWidth - rect.right;
-
-    const margin = window.innerWidth <= 600 ? 8 : 12;
-
-    if (distanceLeft < distanceRight) {
-        element.style.left = `${margin}px`;
-    } else {
-        element.style.left = `${window.innerWidth - rect.width - margin}px`;
-    }
-
-    const updatedRect = element.getBoundingClientRect();
-
-    let top = updatedRect.top;
-
-    top = Math.max(
-        margin,
-        Math.min(top, window.innerHeight - updatedRect.height - margin)
-    );
-
-    element.style.top = `${top}px`;
+function boundedHudPosition(left, top, width, height) {
+    const viewport = window.visualViewport;
+    const minLeft = viewport?.offsetLeft ?? 0, minTop = viewport?.offsetTop ?? 0;
+    const maxLeft = minLeft + Math.max(0, (viewport?.width ?? window.innerWidth) - width);
+    const maxTop = minTop + Math.max(0, (viewport?.height ?? window.innerHeight) - height);
+    return { left: Math.max(minLeft, Math.min(left, maxLeft)), top: Math.max(minTop, Math.min(top, maxTop)) };
 }
 
 function saveHudPosition(element) {
-    const rect = element.getBoundingClientRect();
-
+    // Store the actual CSS position, not a scaled hover/pressed bounding box.
     const position = {
-        left: rect.left,
-        top: rect.top
+        left: parseFloat(element.style.left),
+        top: parseFloat(element.style.top)
     };
+    if (!Number.isFinite(position.left) || !Number.isFinite(position.top)) return;
 
     localStorage.setItem(
         HUD_POSITION_KEY,
@@ -1164,26 +1147,23 @@ function saveHudPosition(element) {
 }
 
 function restoreHudPosition(toggle, panel) {
-    const saved = localStorage.getItem(HUD_POSITION_KEY);
-
-    if (!saved) {
-        return;
-    }
-
     try {
+        const saved = localStorage.getItem(HUD_POSITION_KEY);
+        if (!saved) return;
         const position = JSON.parse(saved);
 
         if (
-            typeof position.left !== 'number' ||
-            typeof position.top !== 'number'
+            !Number.isFinite(position.left) ||
+            !Number.isFinite(position.top)
         ) {
             return;
         }
 
         const element = toggle;
-
-        element.style.left = `${position.left}px`;
-        element.style.top = `${position.top}px`;
+        const rect = element.getBoundingClientRect();
+        const bounded = boundedHudPosition(position.left, position.top, element.offsetWidth || rect.width, element.offsetHeight || rect.height);
+        element.style.left = `${bounded.left}px`;
+        element.style.top = `${bounded.top}px`;
         element.style.right = 'auto';
     } catch (error) {
         console.warn(
