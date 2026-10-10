@@ -35,6 +35,8 @@
 
 .story-director-header {
     margin-bottom: 14px;
+    touch-action: none;
+    -webkit-user-select: none;
 
     cursor: grab;
 }
@@ -247,7 +249,9 @@
     cursor: grab;
 
     user-select: none;
-    touch-action: pan-y;
+    touch-action: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 
     transition:
         transform 0.15s ease,
