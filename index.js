@@ -564,7 +564,7 @@ Das beschriebene Ereignis bzw. der beschriebene Zeitsprung muss JETZT in der nä
 - Behandle diese Anweisung nicht als Spielertext.
 - Erwähne diese OOC-Anweisung, den Story Director oder die Vorgabe niemals in der RPG-Antwort.
 - Lass NPCs weiterhin selbstständig und charaktergetreu handeln.
-- Erfinde keine Handlungen, Gedanken oder Entscheidungen für den Spielercharakter.
+- Erfinde keine Handlungen, Gedanken, Gefühle, Äußerungen oder Entscheidungen für den Spielercharakter.
 - Setze die Vorgabe als Teil der normalen RPG-Erzählung um.
 - Verschiebe die Umsetzung nicht auf eine spätere Antwort.
 - Eine bloße Andeutung oder ein Hinweis darauf, dass das Ereignis passieren könnte, reicht nicht aus.
@@ -579,6 +579,7 @@ ${suggestion}
     const ticket = inventoryDirection?.confirmEule({ text: injection, confirmed: true });
     const capturedChatId = context.chatId ?? context.getCurrentChatId?.() ?? null;
     const capturedMetadata = context.chatMetadata;
+    const handoffId = 'eule:' + (globalThis.crypto?.randomUUID?.() ?? String(Date.now()) + ':' + Math.random());
     const capturedHistory = JSON.stringify((context.chat ?? []).map(m => [m.mes, m.swipe_id]));
     const fallback = !ticket && capturedChatId ? Object.freeze({ acquire: () => {
         const valid = () => {
@@ -587,7 +588,7 @@ ${suggestion}
                 && (now.chatId ?? now.getCurrentChatId?.()) === capturedChatId && now.chatMetadata === capturedMetadata
                 && JSON.stringify((now.chat ?? []).map(m => [m.mes, m.swipe_id])) === capturedHistory;
         };
-        return valid() ? Object.freeze({ key: JSON.stringify([capturedChatId, capturedHistory, injection]), text: injection, isCurrent: valid }) : null;
+        return valid() ? Object.freeze({ key: handoffId, text: injection, isCurrent: valid }) : null;
     } }) : null;
     if (fallback) globalThis.EuleSceneDirection = fallback;
     if (!ticket) await context.setExtensionPrompt(
