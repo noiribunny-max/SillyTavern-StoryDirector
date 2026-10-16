@@ -574,7 +574,23 @@ ${suggestion}
 === ENDE DER REGIEVORGABE ===
 </OOC>`;
 
-    await context.setExtensionPrompt(
+    if (typeof context.generate !== 'function') throw new Error('[Story Director] RPG-Generierung nicht verfügbar.');
+    const inventoryDirection = globalThis.RPGStateTracker?.sceneDirection;
+    const ticket = inventoryDirection?.confirmEule({ text: injection, confirmed: true });
+    const capturedChatId = context.chatId ?? context.getCurrentChatId?.() ?? null;
+    const capturedMetadata = context.chatMetadata;
+    const capturedHistory = JSON.stringify((context.chat ?? []).map(m => [m.mes, m.swipe_id]));
+    const fallback = !ticket && capturedChatId ? Object.freeze({ acquire: () => {
+        const valid = () => {
+            const now = SillyTavern.getContext();
+            return globalThis.EuleSceneDirection === fallback && storyDirectorState.activeInstruction === injection
+                && (now.chatId ?? now.getCurrentChatId?.()) === capturedChatId && now.chatMetadata === capturedMetadata
+                && JSON.stringify((now.chat ?? []).map(m => [m.mes, m.swipe_id])) === capturedHistory;
+        };
+        return valid() ? Object.freeze({ key: JSON.stringify([capturedChatId, capturedHistory, injection]), text: injection, isCurrent: valid }) : null;
+    } }) : null;
+    if (fallback) globalThis.EuleSceneDirection = fallback;
+    if (!ticket) await context.setExtensionPrompt(
         STORY_DIRECTOR_INJECTION_ID,
         injection,
         0,
@@ -597,14 +613,18 @@ ${suggestion}
         );
     }
 
+    let succeeded = false;
     try {
         // Die Vorgabe steckt bereits in setExtensionPrompt().
         // Deshalb wird hier die normale SillyTavern-RPG-Generierung
         // ohne zusätzlichen User-Prompt ausgelöst.
         const generated = await context.generate();
         if (generated === false) throw new Error('[Story Director] RPG-Generierung wurde abgebrochen.');
+        succeeded = true;
     } finally {
-        // Die Director-Vorgabe gilt ausschließlich für diese eine Antwort.
+        ticket?.finish({ success: succeeded });
+        if (fallback && globalThis.EuleSceneDirection === fallback) delete globalThis.EuleSceneDirection;
+        // Ein Eigentümer pro Prompt: Inventar oder Eules eigenständiger Rückfall.
         await clearStoryDirectorInjection();
     }
 }
@@ -1912,10 +1932,10 @@ FORMAT:
             result.innerHTML = '';
 
             const acceptInstruction = `
-Der Time Skip wurde bereits vollständig berücksichtigt.
+Dieser bestätigte Time Skip ist eine erzählerische Vorgabe. Eine gespeicherte Inventar-Zeitänderung ist damit NICHT bestätigt.
 
 Der Zeitsprung von ${startText} bis ${endText} (${durationText}) ist
-JETZT kanonisch passiert. Die untenstehende Zusammenfassung beschreibt
+für die Erzählung bestätigt. Er darf ohne belegte Inventar-Übernahme nicht als gespeicherter RPG-Zeitstand ausgegeben werden. Die untenstehende Zusammenfassung beschreibt
 die relevanten Entwicklungen während dieses Zeitraums.
 
 Setze die RPG-Geschichte unmittelbar AM ENDE dieses Zeitsprungs fort.
