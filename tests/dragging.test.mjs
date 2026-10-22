@@ -1,9 +1,10 @@
+import {prepareSandbox,vmSource} from './vm-support.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const source = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8').replace('export async function init()', 'async function init()');
+const source = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm,'').replace('export async function init()', 'async function init()');
 class Target {
     listeners = new Map();
     addEventListener(type, fn) { const set = this.listeners.get(type) ?? new Set(); set.add(fn); this.listeners.set(type, set); }
@@ -23,7 +24,7 @@ function fixture({ captureFails = false, width = 800, height = 600 } = {}) {
     win.requestAnimationFrame = fn => { frames.set(++frameId, fn); return frameId; };
     win.cancelAnimationFrame = id => frames.delete(id);
     const sandbox = { window: win, document: doc, console, localStorage: { setItem(key, value) { saves.push({ key, value: JSON.parse(value) }); }, getItem() { return saves.at(-1) ? JSON.stringify(saves.at(-1).value) : null; } }, element };
-    vm.createContext(sandbox); vm.runInContext(source, sandbox);
+    prepareSandbox(sandbox);vm.createContext(sandbox); vm.runInContext(source, sandbox);
     const dispose = vm.runInContext('setupDraggable(element)', sandbox);
     return { win, doc, element, sandbox, dispose, saves, get reads() { return reads; }, get captured() { return captured; }, get frameCount() { return frames.size; }, tick() { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(fn => fn()); } };
 }
@@ -169,4 +170,9 @@ test('right button and nonprimary input are ignored; missing mouse release clear
     f.element.emit('pointerdown'); f.win.emit('pointermove', { clientX: 200, buttons: 0 });
     assert.equal(f.captured, null); assert.equal(f.frameCount, 0); assert.equal(f.saves.length, 0);
     f.element.emit('pointerdown'); f.win.emit('pointerup', { clientX: 300 }); assert.equal(f.saves.length, 1);
+});
+
+test('opening appearance ends an active drag without saving it',()=>{
+ const f=fixture();f.element.emit('pointerdown');f.element.emit('eule-appearance-open');
+ assert.equal(f.captured,null);f.win.emit('pointerup',{clientX:400});assert.equal(f.saves.length,0);f.dispose();
 });

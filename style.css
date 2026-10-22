@@ -551,3 +551,33 @@
     border: 1px solid var(--SmartThemeBorderColor, #555);
     border-radius: 7px;
 }
+
+/* Own controls remain usable in SillyTavern's narrow HUD and mobile viewport. */
+.story-director-panel fieldset { min-width: 0; margin: 8px 0; padding: 8px; }
+.story-director-panel fieldset label { display: block; margin: 8px 0; }
+.story-director-panel fieldset input:not([type=checkbox]),
+.story-director-panel fieldset select,
+#eule-history textarea, #eule-history input:not([type=checkbox]) { width: 100%; box-sizing: border-box; min-width: 0; }
+.story-director-panel fieldset button, #eule-history button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; margin: 3px 0; min-height: 36px; }
+#eule-history { overflow-wrap: anywhere; user-select: text; }
+#eule-notice { color: #ffd68a; user-select: text; }
+
+/* Desktop comparison includes newly requested alternatives; phones keep a single column. */
+@media (min-width: 1000px) {
+    .story-director-panel { width: min(1100px, calc(100vw - 40px)); }
+    #story-director-result { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; align-items: start; }
+    #story-director-result > .story-director-result-card { margin-bottom: 0; min-width: 0; }
+    #story-director-result > .story-director-empty,
+    #story-director-result > .story-director-placeholder { grid-column: 1 / -1; }
+}
+.eule-appearance-overlay { position: fixed; inset: 0; z-index: 100001; background: #0009; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; }
+.eule-appearance-dialog { width: min(420px, 100%); max-height: 90vh; overflow-y: auto; box-sizing: border-box; padding: 18px; border-radius: 12px; background: var(--SmartThemeBlurTintColor, #202630); color: var(--SmartThemeBodyColor, #eee); box-shadow: 0 8px 35px #0009; }
+.eule-appearance-dialog label { display: block; margin: 18px 0; }
+.eule-appearance-dialog input[type=range] { display: block; width: 100%; min-height: 44px; }
+.eule-appearance-dialog button { min-height: 44px; padding: 8px 12px; margin: 4px; }
+.story-director-card-actions { flex-wrap: wrap; align-items: center; }
+.story-director-card-button { flex: 1 1 130px; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.story-director-result-card { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .story-director-card-button { flex: 0 1 auto; width: 100%; } }
+.eule-appearance-dialog button { font: inherit; color: var(--SmartThemeBodyColor, #eee); background: #334155; border: 1px solid #64748b; border-radius: 6px; }
+.eule-appearance-dialog button:hover { background: #475569; }

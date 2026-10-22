@@ -1,3 +1,4 @@
+import {prepareSandbox,vmSource} from './vm-support.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
@@ -14,8 +15,8 @@ function fixture(inventory = true) {
     };
     const sandbox = { console: { log() {}, warn() {}, error() {} }, window: {}, document: { getElementById: () => null },
         localStorage: { getItem: () => null }, SillyTavern: { getContext: () => context }, RPGStateTracker: inventory ? { sceneDirection: service } : undefined };
-    vm.createContext(sandbox);
-    vm.runInContext(fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8').replace('export async function init()', 'async function init()'), sandbox);
+    prepareSandbox(sandbox);vm.createContext(sandbox);
+    vm.runInContext(fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm,'').replace('export async function init()', 'async function init()'), sandbox);
     return { context, service, sandbox, calls, state };
 }
 test('actual Eule acceptance uses one inventory prompt and does not write state or the duplicate Eule prompt', async () => {

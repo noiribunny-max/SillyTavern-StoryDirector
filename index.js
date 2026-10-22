@@ -1,3 +1,20 @@
+import { installHudAppearance } from './src/hud-appearance.mjs';
+import { createWorkbench } from './src/workbench.mjs';
+import { connectionSettings, requestEuleModel } from './src/connection.mjs';
+import { compareIdeas } from './src/similarity.mjs';
+let euleWorkbench = null;
+function workbench() { return euleWorkbench ??= createWorkbench({getContext:()=>SillyTavern.getContext(),document,fetcher:(...a)=>fetch(...a),onOpenHistory:()=>{const d=document.getElementById('eule-history')?.parentElement;if(d)d.open=true;},onSelect:showSavedIdea,onContinue:p=>{const f=document.getElementById('story-director-direction');if(f)f.value='Bewusste Fortsetzung mit neuer Konsequenz: '+p.text;}}); }
+function showSavedIdea(p) {
+    const root=document.getElementById('story-director-result');
+    if (!root) return;
+    const scope=JSON.stringify(workbench().store.pin().scope);
+    if (root.dataset.euleScope !== scope) { root.textContent=''; root.dataset.euleScope=scope; }
+    const previous=Array.from(root.children).find(card=>card.getAttribute('data-eule-idea-id')===p.id);
+    previous?.remove();
+    root.appendChild(createStoryDirectorResultCard({label:p.kind==='timeskip'?'Time Skip':p.kind==='unstuck'?'Story retten':getStoryDirectorTaskLabel(p.task),response:p.text,ideaId:p.id,acceptInstruction:p.range?`Gewählter möglicher Zeitraum: ${p.range.from} bis ${p.range.to}, ${p.range.duration}.`:null}));
+}
+
+async function recordIdea(text,kind,pin,extra={}) {const [p]=await workbench().add([{text,kind,...extra}],pin);return p.id;}
 const HUD_POSITION_KEY = 'story-director-hud-position';
 
 const storyDirectorState = {
@@ -42,7 +59,7 @@ function getStoryDirectorGenerationTokens(kind) {
     }
     const context = SillyTavern.getContext();
     const service = context.ConnectionManagerRequestService;
-    const profileId = context.extensionSettings?.connectionManager?.selectedProfile;
+    const profileId = connectionSettings(context).profileId;
     let api = context.mainApi, preset;
     try {
         const profile = service?.getProfile?.(profileId);
@@ -51,8 +68,8 @@ function getStoryDirectorGenerationTokens(kind) {
         preset = profile?.preset ? manager?.getCompletionPresetByName?.(profile.preset) : null;
     } catch { /* Older hosts may not expose profile/preset readers. */ }
     const value = api === 'textgenerationwebui'
-        ? positiveTokens(preset?.genamt) ?? positiveTokens(context.textCompletionSettings?.genamt)
-        : positiveTokens(preset?.openai_max_tokens) ?? positiveTokens(context.chatCompletionSettings?.openai_max_tokens);
+        ? positiveTokens(preset?.genamt)
+        : positiveTokens(preset?.openai_max_tokens);
     // sendRequest requires a response budget. Keep the existing generic 800-token
     // safety fallback only when the host exposes no usable generation setting.
     return value ?? 800;
@@ -77,22 +94,16 @@ function directorDiagnostic(result, maxTokens) {
     };
 }
 
-async function generateDirectorResponse(prompt, maxTokens, retryOnEmpty = true) {
+async function generateDirectorResponse(prompt, maxTokens, retryOnEmpty = false) {
     const context = SillyTavern.getContext();
-    const service = context.ConnectionManagerRequestService;
-    const profileId = context.extensionSettings?.connectionManager?.selectedProfile;
-    if (!profileId || !service?.sendRequest) {
-        throw directorError('connection', 'Kein verfügbares Connection Profile. Bitte die SillyTavern-Verbindung prüfen.');
-    }
     const request = async requestPrompt => {
         let result;
         try {
             // Preserve provider metadata: extracted responses discard finish_reason/usage.
             // Never apply unsupported reasoning parameters to the main profile.
-            result = await service.sendRequest(profileId, requestPrompt, maxTokens, {
-                stream: false, extractData: false,
-            });
-        } catch {
+            result = await requestEuleModel(context, requestPrompt, maxTokens);
+        } catch (error) {
+            if(error.directorCode)throw error;
             throw directorError('request', 'API-Anfrage fehlgeschlagen. Bitte Verbindung, Modell, Zugang und Anbieterstatus prüfen.');
         }
         const diagnostic = directorDiagnostic(result, maxTokens);
@@ -112,10 +123,7 @@ async function generateDirectorResponse(prompt, maxTokens, retryOnEmpty = true) 
         return candidates.find(value => typeof value === 'string' && value.trim())?.trim() ?? '';
     };
     let text = await request(prompt);
-    if (!text && retryOnEmpty) {
-        // Retry retains the user's budget, including budgets above 1000 tokens.
-        text = await request(prompt + '\nGib ausschließlich die fertige Antwort aus, ohne Analyse oder Reasoning.');
-    }
+    // One explicit slot request; no automatic retry.
     if (!text) throw directorError('empty', 'Kein fertiger Antworttext erhalten; eventuell nur Thinking. Angefordert: '
         + maxTokens + ' Tokens. Ein Modell mit weniger Thinking wählen oder dessen Ausgabegrenze prüfen.');
     return text;
@@ -137,27 +145,9 @@ function parseDirectorSuggestion(response) {
     return body;
 }
 
-window.testStoryDirectorConnection = async () => {
-    try {
-        const response = await generateDirectorResponse(
-            'Antworte nur mit: Story Director online.',
-            100
-        );
-
-        console.log(
-            '[Story Director] TEST RESPONSE:',
-            response
-        );
-
-        return response;
-    } catch (error) {
-        console.error(
-            '[Story Director] TEST FAILED:',
-            error
-        );
-
-        throw error;
-    }
+window.testStoryDirectorConnection = () => {
+    openSettings();
+    throw new Error('EULE_USE_EXPLICIT_CONNECTION_TEST');
 };
 
 function getStoryDirectorChatContext(limit = 30) {
@@ -201,7 +191,7 @@ async function getStoryDirectorBoundLorebookContext() {
         worldInfo?.entries ?? {}
     )
         .filter(entry =>
-            entry &&
+            entry && !entry.disable &&
             typeof entry.content === 'string' &&
             entry.content.trim()
         )
@@ -220,8 +210,8 @@ async function getStoryDirectorBoundLorebookContext() {
                     : [],
 
             secondary:
-                Array.isArray(entry.secondary)
-                    ? entry.secondary
+                Array.isArray(entry.keysecondary ?? entry.secondary)
+                    ? (entry.keysecondary ?? entry.secondary)
                     : [],
 
             constant:
@@ -635,7 +625,7 @@ function createStoryDirectorActionButton(label, className, handler) {
     button.type = 'button';
     button.className = `story-director-card-button ${className}`;
     button.textContent = label;
-    button.addEventListener('click', handler);
+    button.addEventListener('click', async (event) => { button.disabled=true; try { await handler(event); } catch(error) { workbench().safeError(error); } finally { button.disabled=false; } });
     return button;
 }
 
@@ -645,9 +635,11 @@ function createStoryDirectorResultCard({
     failed = false,
     icon = '🎲',
     acceptInstruction = null,
+    ideaId = null,
 }) {
     const card = document.createElement('div');
     card.className = 'story-director-result-card';
+    if(ideaId)card.setAttribute('data-eule-idea-id',ideaId);
 
     const title = document.createElement('strong');
     title.textContent = `${failed ? '⚠️' : icon} ${label}`;
@@ -662,6 +654,14 @@ function createStoryDirectorResultCard({
         return card;
     }
 
+    function refreshDecisionTitle() {
+        if (!ideaId) return;
+        const labels = { PROPOSED: 'Vorgeschlagen', ACCEPTED: 'Angenommen', REJECTED: 'Abgelehnt', DEFERRED: 'Für später gemerkt' };
+        const decision = workbench().current(ideaId).decision;
+        title.textContent = `${icon} ${label} – ${labels[decision]}`;
+    }
+    refreshDecisionTitle();
+
     const editor = document.createElement('textarea');
     editor.className = 'story-director-result-editor';
     editor.value = response ?? '';
@@ -674,10 +674,12 @@ function createStoryDirectorResultCard({
     const editButton = createStoryDirectorActionButton(
         '✏️ Bearbeiten',
         'story-director-edit-button',
-        () => {
+        async () => {
             const editing = editor.style.display !== 'none';
 
             if (editing) {
+                if(ideaId)await workbench().store.decide(ideaId,'EDIT',{text:editor.value.trim()});
+                refreshDecisionTitle();
                 text.textContent = editor.value.trim();
                 editor.style.display = 'none';
                 editButton.textContent = '✏️ Bearbeiten';
@@ -690,54 +692,38 @@ function createStoryDirectorResultCard({
         }
     );
 
-    const acceptButton = createStoryDirectorActionButton(
-        '✅ Übernehmen',
-        'story-director-accept-button',
-        async () => {
-            const currentText =
-                editor.style.display !== 'none'
-                    ? editor.value.trim()
-                    : text.textContent.trim();
-
-            if (!currentText) {
-                return;
-            }
-
-            text.textContent = currentText;
-            editor.value = currentText;
-            editor.style.display = 'none';
-            editButton.textContent = '✏️ Bearbeiten';
-
-            actions.querySelectorAll('button').forEach(button => {
-                button.disabled = true;
-            });
-
-            const originalLabel = acceptButton.textContent;
-            acceptButton.textContent = '🦉 Wird übernommen...';
-
-            try {
-                const instructionToApply = acceptInstruction
-                    ? acceptInstruction + '\n\n=== AKTUELLER/BEARBEITETER TEXT ===\n' + currentText
-                    : currentText;
-
-                await applyStoryDirectorSuggestion(instructionToApply);
-            } catch (error) {
-                console.error(
-                    '[Story Director] Suggestion apply failed:',
-                    error
-                );
-                acceptButton.disabled = false;
-                editButton.disabled = false;
-                acceptButton.textContent = originalLabel;
-                throw error;
-            }
-        }
-    );
-
+    const acceptButton = createStoryDirectorActionButton('✓ Annehmen (noch nicht ausspielen)','story-director-accept-button',async()=>{
+        if(!ideaId)throw Error('EULE_HISTORY_REQUIRED');
+        const value=editor.style.display!=='none'?editor.value.trim():text.textContent.trim();
+        await workbench().store.decide(ideaId,'ACCEPTED',{text:value});refreshDecisionTitle();text.textContent=value;editor.style.display='none';acceptButton.textContent='✓ Angenommen; noch nicht ausgespielt';workbench().renderHistory();
+    });
     actions.appendChild(editButton);
     actions.appendChild(acceptButton);
 
     card.appendChild(editor);
+    if(ideaId){
+        const add=(label,fn)=>actions.appendChild(createStoryDirectorActionButton(label,'story-director-action',fn));
+        add('Ablehnen',async()=>{await workbench().store.decide(ideaId,'REJECTED');refreshDecisionTitle();workbench().renderHistory();});
+        add('Später',async()=>{await workbench().store.decide(ideaId,'DEFERRED');refreshDecisionTitle();workbench().renderHistory();});
+        const consent=document.createElement('input');consent.type='checkbox';consent.setAttribute('aria-label','Jetzt ausdrücklich eine RPG-Generierung mit dieser angenommenen Idee starten');actions.appendChild(consent);
+        add('Jetzt in RPG-Antwort umsetzen (Modellanfrage)',async()=>{
+            if(!consent.checked)throw Error('EULE_GENERATION_CONFIRM_REQUIRED');
+            const p=workbench().current(ideaId);if(p.decision!=='ACCEPTED'||p.text!==text.textContent.trim())throw Error('EULE_ACCEPT_CURRENT_EDIT_FIRST');
+            const hits=compareIdeas(p.text,workbench().store.read().ideas.filter(x=>x.id!==p.id),{continuationOf:p.continuationOf});
+            if(hits.length&&!consent.dataset.similarityReviewed){consent.dataset.similarityReviewed='pending';consent.checked=false;const warning=document.createElement('p');warning.textContent='Ähnliche ältere Ideen vorhanden: in der Historie vergleichen. Für bewusste Wiederverwendung Haken erneut setzen und nochmals ausdrücklich umsetzen.';card.appendChild(warning);return;}
+            consent.checked=false;await workbench().store.delivery(ideaId,'PENDING');
+            try{await applyStoryDirectorSuggestion(acceptInstruction?acceptInstruction+'\n'+p.text:p.text);await workbench().store.delivery(ideaId,'SENT');}
+            catch(e){await workbench().store.delivery(ideaId,'UNKNOWN');throw e;}
+        });
+        add('Gezielt neu / neu planen',async()=>{
+            const p=workbench().current(ideaId);if(p.kind==='timeskip'){await openStoryDirectorTimeSkipDialog();return;}
+            if(!['event','twist'].includes(p.kind))throw Error('EULE_USE_TASK_BUTTON');
+            if(storyDirectorState.eventGenerationInProgress||storyDirectorState.applyingSuggestion)throw Error('EULE_REQUEST_BUSY');
+            storyDirectorState.eventGenerationInProgress=true;
+            try{const pin=workbench().store.pin();const next=await generateEventForSlot({slot:1,task:p.task},null,{previousSuggestions:[workbench().summary()],differentSuggestions:true},p.kind,p.direction);workbench().store.assertCurrent(pin);const id=await recordIdea(next.response,p.kind,pin,{task:p.task,direction:p.direction});card.parentElement?.appendChild(createStoryDirectorResultCard({label:'Neuer Vorschlag; alte Idee bleibt erhalten',response:next.response,ideaId:id}));}
+            finally{storyDirectorState.eventGenerationInProgress=false;}
+        });
+    }
     card.appendChild(actions);
 
     return card;
@@ -851,6 +837,7 @@ function createStoryDirectorPanel() {
             <label for="story-director-direction">Idee / Richtung für Event oder Twist (optional)</label>
             <textarea id="story-director-direction" class="story-director-direction" rows="2" placeholder="Freie Generierung oder eine kreative Richtung…"></textarea>
 
+            <p>Event/Twist: ein Modellaufruf je eingestelltem Vorschlags-Slot (1–4). Time Skip, Story retten und gezieltes Neuplanen: jeweils ein Aufruf. Keine automatischen Wiederholungen. Annahme löst keine RPG-Antwort aus.</p>
             <button class="story-director-button" data-action="event">
                 🎲 Event würfeln
             </button>
@@ -957,7 +944,7 @@ function createStoryDirectorPanel() {
             <span>Director verwendet eigene Ausgabegrenzen (Tokens)</span>
         </label>
 
-        <p>Positive ganze Zahl frei eingeben. Die Grenze gilt auch beim zweiten Versuch; bei manchen Modellen verbraucht Thinking einen Teil davon. Anbietergrenzen bleiben bestehen.</p>
+        <p>Positive ganze Zahl frei eingeben. Es gibt keine automatische zweite Anfrage; bei manchen Modellen verbraucht Thinking einen Teil davon. Anbietergrenzen bleiben bestehen.</p>
         <div class="story-director-token-settings">
 
             <div class="story-director-token-setting">
@@ -1013,20 +1000,29 @@ function createStoryDirectorPanel() {
     document.body.appendChild(toggle);
     document.body.appendChild(panel);
 
+    const appearanceCleanup = installHudAppearance(toggle, {
+        onResize: () => {
+            const rect = toggle.getBoundingClientRect();
+            const position = boundedHudPosition(rect.left, rect.top, toggle.offsetWidth, toggle.offsetHeight);
+            toggle.style.left = position.left + 'px'; toggle.style.top = position.top + 'px'; toggle.style.right = 'auto';
+        },
+        onSave: () => saveHudPosition(toggle),
+    });
     restoreHudPosition(toggle, panel);
 
     setupToggle(toggle, panel);
     setupCloseButton(toggle, panel);
-    setupDragging(toggle, panel);
+    setupDragging(toggle, panel, appearanceCleanup);
     setupSettingsBackButton(panel);
     setupSuggestionSettings(panel);
+    workbench().mount(panel);
 
     
 
 
     panel.querySelectorAll('.story-director-button').forEach(button => {
         button.addEventListener('click', () => {
-            handleDirectorAction(button.dataset.action);
+            handleDirectorAction(button.dataset.action).catch(error=>workbench().safeError(error));
         });
     });
 
@@ -1035,6 +1031,7 @@ function createStoryDirectorPanel() {
 
 function setupToggle(toggle, panel) {
     toggle.addEventListener('click', () => {
+        if (toggle.dataset.appearanceOpen === 'true' || toggle.dataset.appearanceSuppressClick === 'true') { toggle.dataset.appearanceSuppressClick = 'false'; return; }
         if (toggle.dataset.wasDragged === 'true') {
             toggle.dataset.wasDragged = 'false';
             return;
@@ -1056,8 +1053,8 @@ function setupCloseButton(toggle, panel) {
     });
 }
 
-function setupDragging(toggle, panel) {
-    const cleanups = [setupDraggable(toggle), setupDraggable(panel, panel.querySelector('.story-director-header'))];
+function setupDragging(toggle, panel, appearanceCleanup = () => {}) {
+    const cleanups = [appearanceCleanup, setupDraggable(toggle), setupDraggable(panel, panel.querySelector('.story-director-header'))];
     const observer = new MutationObserver(() => {
         if (!toggle.isConnected || !panel.isConnected) cleanup();
     });
@@ -1139,6 +1136,7 @@ function setupDraggable(element, handle = element) {
     listen(window, 'pointerup', event => finish(true, event));
     listen(window, 'pointercancel', event => finish(false, event));
     listen(handle, 'lostpointercapture', event => finish(false, event));
+    listen(handle, 'eule-appearance-open', () => finish());
     listen(window, 'blur', () => finish());
     listen(document, 'visibilitychange', () => { if (document.hidden) finish(); });
     listen(handle, 'dragstart', event => event.preventDefault());
@@ -1201,6 +1199,7 @@ async function generateEventForSlot(
     kind = 'event',
     direction = ''
 ) {
+    const requestPin=workbench().store.pin();
     const maxTokens = getStoryDirectorGenerationTokens(kind);
 
     const taskInstruction =
@@ -1248,7 +1247,7 @@ ${previousText}
 
 === WICHTIGE DIVERSITÄTSREGEL ===
 Dieser Slot muss sich deutlich von den bereits erzeugten Vorschlägen unterscheiden.
-${direction.trim() ? 'Behalte den Kern der kreativen Richtung bei; darin gewünschte Figuren oder Orte dürfen wiederkehren. Wähle aber einen anderen Mechanismus, eine andere Enthüllung oder Konsequenz und berücksichtige die jeweilige Slot-Stimmung.' : 'Verwende keinen bereits verwendeten Charakter, Ort, Clan, Gruppe, Gegenstand oder Storykonflikt erneut als Hauptfokus, sofern der gewählte dramaturgische Fokus nicht ausdrücklich genau dessen Fortsetzung verlangt.'}
+${direction.trim() ? 'Behalte den Kern der kreativen Richtung bei; darin gewünschte Figuren oder Orte dürfen wiederkehren. Wähle aber einen anderen Mechanismus, eine andere Enthüllung oder Konsequenz und berücksichtige die jeweilige Slot-Stimmung.' : 'Dieselben Figuren und Orte dürfen wiederkehren. Variiere Anlass, Mechanismus oder neue Konsequenz; eine reine Umformulierung ist keine neue Idee.'}
 Lorebook-Einträge sind Hintergrundwissen und keine Aufforderung, sie in jedem Vorschlag zu verwenden.
 Suche stattdessen einen anderen relevanten Ansatz aus dem aktuellen Story-Kontext.
 `;
@@ -1270,6 +1269,7 @@ ${taskInstruction}
 ${getStoryDirectorDirectionInstruction(direction)}
 ${preferenceInstruction}
 ${diversityInstruction}
+Dramatik: ${document.getElementById('eule-intensity')?.value??'mittel'}. Ruhige Alltagsmomente und unveränderte Beziehungen sind zulässig. Keine Retcons, erzwungene Versöhnung oder Spielerentscheidungen. Autorwissen ist kein NPC-Wissen.
 
 === AUFGABE ===
 
@@ -1338,6 +1338,7 @@ ${taskInstruction}
 ${getStoryDirectorDirectionInstruction(direction)}
 ${preferenceInstruction}
 ${diversityInstruction}
+Dramatik: ${document.getElementById('eule-intensity')?.value??'mittel'}. Ruhige Alltagsmomente und unveränderte Beziehungen sind zulässig. Keine Retcons, erzwungene Versöhnung oder Spielerentscheidungen. Autorwissen ist kein NPC-Wissen.
 
 === REGELN FÜR DEN TWIST ===
 
@@ -1379,6 +1380,7 @@ FORMAT:
 `;
 
     const prompt = kind === 'twist' ? twistPrompt : eventPrompt;
+    workbench().store.assertCurrent(requestPin);
     const response = parseDirectorSuggestion(await generateDirectorResponse(prompt, maxTokens));
 
     return {
@@ -1410,6 +1412,7 @@ async function generateStoryDirectorEvents(kind = 'event', direction = document.
         '[Story Director] Generating all event slots...'
     );
 
+    const pinned=workbench().store.pin(),remembered=workbench().summary();
     const slots =
         getStoryDirectorSlotSettings();
 
@@ -1434,9 +1437,10 @@ async function generateStoryDirectorEvents(kind = 'event', direction = document.
             || getStoryDirectorOption('avoidRecentIdeas', 'story-director-avoid-recent');
 
     const results = [];
-    const previousSuggestions = [];
+    const previousSuggestions = remembered ? [remembered] : [];
 
     for (const slot of slots) {
+        workbench().store.assertCurrent(pinned);
         try {
             const result =
                 await generateEventForSlot(
@@ -1475,10 +1479,14 @@ async function generateStoryDirectorEvents(kind = 'event', direction = document.
 
 
 
+    workbench().store.assertCurrent(pinned);
+    const good=results.filter(r=>!r.failed);
+    if(good.length){const stored=await workbench().add(good.map(r=>({text:r.response,kind,task:r.task,direction,intensity:document.getElementById('eule-intensity')?.value??'mittel'})),pinned);good.forEach((r,i)=>r.ideaId=stored[i].id);}
     return results;
 }
 
 async function generateStoryDirectorUnstuck() {
+    const requestPin=workbench().store.pin();
     const maxTokens = getStoryDirectorGenerationTokens('unstuck');
 
     const storyContext =
@@ -1530,6 +1538,7 @@ FORMAT:
 [Konkreter Ansatz in 2–4 Sätzen.]
 `;
 
+    workbench().store.assertCurrent(requestPin);
     return await generateDirectorResponse(prompt, maxTokens);
 }
 
@@ -1566,7 +1575,9 @@ function parseStoryDirectorDate(value) {
         return null;
     }
 
-    const date = new Date(Date.UTC(calculationYear, month - 1, day));
+    const date = new Date(0);
+    date.setUTCHours(0,0,0,0);
+    date.setUTCFullYear(calculationYear, month - 1, day);
 
     if (
         date.getUTCFullYear() !== calculationYear ||
@@ -1603,7 +1614,7 @@ function formatStoryDirectorDate(dateInfo) {
 }
 
 function addStoryDirectorDuration(start, amount, unit) {
-    if (!start || !Number.isFinite(amount) || amount <= 0) return null;
+    if (!start || !Number.isSafeInteger(amount) || amount <= 0) return null;
 
     const result = {
         ...start,
@@ -1615,13 +1626,20 @@ function addStoryDirectorDuration(start, amount, unit) {
     } else if (unit === 'weeks') {
         result.date.setUTCDate(result.date.getUTCDate() + amount * 7);
     } else if (unit === 'months') {
-        result.date.setUTCMonth(result.date.getUTCMonth() + amount);
+        const day=result.date.getUTCDate();result.date.setUTCDate(1);
+        result.date.setUTCMonth(result.date.getUTCMonth()+amount);
+        const last=new Date(result.date.getTime());last.setUTCMonth(last.getUTCMonth()+1,0);
+        result.date.setUTCDate(Math.min(day,last.getUTCDate()));
     } else if (unit === 'years') {
-        result.date.setUTCFullYear(result.date.getUTCFullYear() + amount);
+        const day=result.date.getUTCDate();result.date.setUTCDate(1);
+        result.date.setUTCFullYear(result.date.getUTCFullYear()+amount);
+        const last=new Date(result.date.getTime());last.setUTCMonth(last.getUTCMonth()+1,0);
+        result.date.setUTCDate(Math.min(day,last.getUTCDate()));
     } else {
         return null;
     }
 
+    if (!Number.isFinite(result.date.getTime()) || result.date.getUTCFullYear()>999999) return null;
     result.day = result.date.getUTCDate();
     result.month = result.date.getUTCMonth() + 1;
 
@@ -1709,11 +1727,15 @@ function createStoryDirectorTimeSkipDialog() {
             </div>
         </div>
 
+        <p>Nur Vorschlag: keine Uhr-, Quest- oder Beziehungsbuchung. Monats-/Jahressprünge enden spätestens am letzten gültigen Monatstag. Fantasy-Daten XXnn verwenden eine vereinfachte Kalenderkonvention.</p>
+        <label>Laufende Ereignisse, Fristen und Beziehungen (nur belegte Angaben)</label>
+        <textarea data-ts-facts rows="4" placeholder="Aktuelles Datum bestätigen; offene Ereignisse, Fristen, Beziehungen und Konflikte." style="width:100%;box-sizing:border-box"></textarea>
         <label style="display:block;margin-bottom:6px;">📝 Zusätzliche Vorgaben</label>
         <textarea data-ts-instructions rows="6"
             placeholder="z. B. Mitsuki ist noch nicht zurück. Ignoriere Mitsuki in der Zusammenfassung. Sie schreibt Naruto gelegentlich Briefe mit Fotos und Zeichnungen."
             style="width:100%;box-sizing:border-box;resize:vertical;margin-bottom:14px;"></textarea>
 
+        <p data-ts-preview role="status">Zeitraum noch nicht vollständig angegeben. Keine Modellanfrage gestartet.</p>
         <div data-ts-error style="display:none;margin-bottom:12px;padding:8px;border-radius:8px;background:rgba(180,40,40,.25);"></div>
 
         <div style="display:flex;justify-content:flex-end;gap:8px;">
@@ -1737,6 +1759,13 @@ function createStoryDirectorTimeSkipDialog() {
     };
 
     mode.addEventListener('change', updateMode);
+    const updatePreview = () => {
+        const start=parseStoryDirectorDate(box.querySelector('[data-ts-start]').value);
+        const end=mode.value==='duration' ? addStoryDirectorDuration(start,Number(box.querySelector('[data-ts-duration]').value),box.querySelector('[data-ts-unit]').value) : parseStoryDirectorDate(box.querySelector('[data-ts-end]').value);
+        const days=start&&end ? getStoryDirectorDateDifference(start,end) : null;
+        box.querySelector('[data-ts-preview]').textContent=days>0 ? `Vorschlag: ${formatStoryDirectorDate(start)} → ${formatStoryDirectorDate(end)} (${days} Tage). Erst „Zeitsprung erstellen“ startet eine Modellanfrage.` : 'Zeitraum noch nicht gültig. Keine Modellanfrage gestartet.';
+    };
+    box.querySelectorAll('input,select').forEach(input=>{input.addEventListener('input',updatePreview);input.addEventListener('change',updatePreview);});
 
     const close = () => overlay.remove();
 
@@ -1748,6 +1777,7 @@ function createStoryDirectorTimeSkipDialog() {
 }
 
 async function openStoryDirectorTimeSkipDialog() {
+    const dialogPin=workbench().store.pin();
     const dialog = createStoryDirectorTimeSkipDialog();
     const box = dialog.box;
 
@@ -1759,6 +1789,10 @@ async function openStoryDirectorTimeSkipDialog() {
     const instructionsInput = box.querySelector('[data-ts-instructions]');
 
     submit.addEventListener('click', async () => {
+        if(storyDirectorState.eventGenerationInProgress||storyDirectorState.applyingSuggestion)return;
+        storyDirectorState.eventGenerationInProgress=true;
+        try { await (async()=>{
+        try { workbench().store.assertCurrent(dialogPin); } catch(error) { workbench().safeError(error); dialog.errorBox.textContent='Chat oder Verlauf geändert. Dialog neu öffnen.';dialog.errorBox.style.display='block';return; }
         const start = parseStoryDirectorDate(startInput.value);
         const mode = dialog.mode.value;
 
@@ -1823,9 +1857,11 @@ async function openStoryDirectorTimeSkipDialog() {
         const startText = formatStoryDirectorDate(start);
         const endText = formatStoryDirectorDate(end);
         const extraInstructions = instructionsInput.value.trim();
+        const temporalFacts=box.querySelector('[data-ts-facts]')?.value.trim()||'(Keine zusätzlichen bestätigten Fakten.)';
 
         dialog.close();
 
+        const pinned=workbench().store.pin();
         const maxTokens = getStoryDirectorGenerationTokens('timeskip');
 
         const storyContext =
@@ -1837,10 +1873,17 @@ async function openStoryDirectorTimeSkipDialog() {
         const prompt = `
 Du bist der Story Director eines langfristigen RPGs.
 
-Die Geschichte wird für einen definierten Zeitraum übersprungen.
+Entwirf einen möglichen Zeitsprung für einen definierten Zeitraum. Es ist noch nichts geschehen oder bestätigt.
 Du sollst zusammenfassen, was WÄHREND dieses Zeitraums sinnvoll und
-nachvollziehbar passiert ist, damit die RPG-Geschichte anschließend am
+nachvollziehbar passieren könnte, damit die Nutzerin eine mögliche Fortsetzung am
 Ende des Zeitraums fortgesetzt werden kann.
+
+=== IDEENHISTORIE (VORSCHLÄGE, NICHT AUTOMATISCH GESCHEHEN) ===
+${workbench().summary()}
+
+=== BESTÄTIGTE ZEIT-/EREIGNIS-/BEZIEHUNGSANGABEN DER NUTZERIN ===
+${temporalFacts}
+Nutze nur belegte laufende Ereignisse, Fristen und gerichtete Beziehungen aus diesen Angaben, Chat und Lore. Fehlendes bleibt unbekannt. Vergangene Zeit allein erzeugt keine Heilung, Versöhnung, neuen Gefühle oder Questabschlüsse. Keine Spielerhandlungen festlegen.
 
 === ZEITRAUM ===
 Start: ${startText}
@@ -1853,7 +1896,7 @@ ${formattedContext}
 === ZUSÄTZLICHE VORGABEN DES SPIELERS ===
 ${extraInstructions || '(Keine zusätzlichen Vorgaben.)'}
 
-Diese Vorgaben sind feste Rahmenbedingungen für den Zeitsprung.
+Diese Vorgaben sind feste Rahmenbedingungen für einen möglichen Zeitsprung. Keine Uhr, Beziehung, Quest oder Statewerte ändern. Unveränderte Beziehungen sind zulässig; keine Versöhnung erzwingen.
 Sie sind keine bloßen Story-Ideen und dürfen nicht ignoriert werden.
 Wenn eine Figur laut Vorgabe noch nicht zurück ist, darf sie während
 dieses Zeitsprungs nicht plötzlich zurückkehren.
@@ -1927,11 +1970,14 @@ FORMAT:
         `;
 
         try {
+            workbench().store.assertCurrent(pinned);
             const response =
                 await generateDirectorResponse(prompt, maxTokens);
 
             result.innerHTML = '';
 
+            workbench().store.assertCurrent(pinned);
+            const ideaId=await recordIdea(response,'timeskip',pinned,{range:{from:startText,to:endText,duration:durationText}});
             const acceptInstruction = `
 Dieser bestätigte Time Skip ist eine erzählerische Vorgabe. Eine gespeicherte Inventar-Zeitänderung ist damit NICHT bestätigt.
 
@@ -1955,6 +2001,7 @@ weiterhin als verbindlich.
                     response,
                     icon: '⏩',
                     acceptInstruction,
+                    ideaId,
                 })
             );
         } catch (error) {
@@ -1966,13 +2013,12 @@ weiterhin als verbindlich.
                 </div>
             `;
 
-            console.error(
-                '[Story Director] Time Skip generation failed:',
-                error
-            );
+            workbench().safeError(error);
         } finally {
             storyDirectorState.eventGenerationInProgress = false;
         }
+        })(); } catch(error) { workbench().safeError(error); }
+        finally { storyDirectorState.eventGenerationInProgress=false; }
     });
 }
 
@@ -2027,6 +2073,7 @@ async function handleDirectorAction(action) {
                         label: event.label,
                         response: event.response,
                         failed: event.failed,
+                        ideaId: event.ideaId,
                         icon: action === 'twist' ? '🌀' : '🎲',
                     })
                 );
@@ -2040,10 +2087,7 @@ async function handleDirectorAction(action) {
                 </div>
             `;
 
-            console.error(
-                '[Story Director] Event generation failed:',
-                error
-            );
+            workbench().safeError(error);
         } finally {
             storyDirectorState.eventGenerationInProgress = false;
         }
@@ -2079,13 +2123,16 @@ async function handleDirectorAction(action) {
         `;
 
         try {
+            const pinned=workbench().store.pin();
             const response =
                 await generateStoryDirectorUnstuck();
+            const ideaId=await recordIdea(response,'unstuck',pinned);
 
             result.innerHTML = '';
 
             result.appendChild(
                 createStoryDirectorResultCard({
+                    ideaId,
                     label: 'Story retten',
                     response,
                     icon: '🆘',
@@ -2100,10 +2147,7 @@ async function handleDirectorAction(action) {
                 </div>
             `;
 
-            console.error(
-                '[Story Director] Unstuck generation failed:',
-                error
-            );
+            workbench().safeError(error);
         } finally {
             storyDirectorState.eventGenerationInProgress = false;
         }
@@ -2152,7 +2196,7 @@ function setupSettingsBackButton(panel) {
     backButton.addEventListener('click', () => {
         settings.style.display = 'none';
         section.style.display = 'block';
-        result.style.display = 'block';
+        result.style.display = '';
 
         console.log('[Story Director] Settings closed');
     });
@@ -2402,7 +2446,7 @@ function saveSuggestionSettings(slotCountSelect, slotsContainer) {
         JSON.stringify(settings)
     );
 
-    console.log('[Story Director] Suggestion settings saved:', settings);
+    console.log('[Story Director] Suggestion settings saved.');
 }
 
 function getStoryDirectorSlotSettings() {
@@ -2412,7 +2456,8 @@ function getStoryDirectorSlotSettings() {
         );
 
     if (!saved) {
-        return [];
+        const selects = document.querySelectorAll?.('#story-director-slots select[data-slot]');
+        return selects?.length ? Array.from(selects, select => ({ slot: Number(select.dataset.slot), task: normalizeStoryDirectorTask(select.value) })) : [{ slot: 1, task: 'random' }];
     }
 
     try {
