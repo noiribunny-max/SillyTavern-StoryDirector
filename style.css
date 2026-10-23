@@ -397,6 +397,46 @@
     font-size: 14px;
 }
 
+/* Own-connection controls follow the active SillyTavern theme. */
+#story-director-settings > fieldset input:not([type="checkbox"]),
+#story-director-settings > fieldset select,
+#story-director-settings > fieldset button {
+    font: inherit;
+    color: var(--SmartThemeBodyColor, #eee);
+    background-color: var(--black30a, rgba(0, 0, 0, 0.3));
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    border-radius: 5px;
+    padding: 6px 8px;
+}
+
+#story-director-settings > fieldset input::placeholder {
+    color: var(--SmartThemeEmColor, #aaa);
+    opacity: 0.7;
+}
+
+#story-director-settings > fieldset select option {
+    color: var(--SmartThemeBodyColor, #eee);
+    background-color: var(--SmartThemeBlurTintColor, #202020);
+}
+
+#story-director-settings > fieldset button:not(:disabled) {
+    cursor: pointer;
+}
+
+#story-director-settings > fieldset button:not(:disabled):hover {
+    background-color: var(--black50a, rgba(0, 0, 0, 0.5));
+}
+
+#story-director-settings > fieldset :is(input, select, button):focus-visible {
+    outline: 2px solid var(--SmartThemeQuoteColor, #aaa);
+    outline-offset: 2px;
+}
+
+#story-director-settings > fieldset :is(input, select, button):disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .story-director-slots {
     display: flex;
     flex-direction: column;
