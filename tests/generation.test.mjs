@@ -1,3 +1,4 @@
+import {prepareSandbox,vmSource} from './vm-support.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
@@ -5,16 +6,16 @@ const calls=[], logs=[];
 let responses=[];
 const settings={tokens:{event:3456},customTokens:true,slots:[{slot:1,task:'conflict'},{slot:2,task:'negative'}],slotCount:2};
 const context={extensionSettings:{connectionManager:{selectedProfile:'main'}},ConnectionManagerRequestService:{sendRequest:async(...args)=>{calls.push(args);const value=responses.shift();if(value instanceof Error)throw value;return value;}}};
-const sandbox={window:{},console:{log:(...v)=>logs.push(v),info:(...v)=>logs.push(v),warn:(...v)=>logs.push(v),error:(...v)=>logs.push(v)},document:{getElementById:()=>null},localStorage:{getItem:key=>key === 'story-director-profile' ? null : JSON.stringify(settings)},SillyTavern:{getContext:()=>context}};
-vm.createContext(sandbox);
+const sandbox={window:{},console:{log:(...v)=>logs.push(v),info:(...v)=>logs.push(v),warn:(...v)=>logs.push(v),error:(...v)=>logs.push(v)},document:{getElementById:()=>null},localStorage:{getItem:()=>JSON.stringify(settings)},SillyTavern:{getContext:()=>context}};
+prepareSandbox(sandbox);vm.createContext(sandbox);
 const source=fs.readFileSync(new URL('../index.js',import.meta.url),'utf8');
-vm.runInContext(source.replace('export async function init()','async function init()'),sandbox);
+vm.runInContext(vmSource(source),sandbox);
 const run=code=>vm.runInContext(code,sandbox);
 assert.equal(run("getStoryDirectorGenerationTokens('event')"),3456);
 responses=[{choices:[{message:{content:''},finish_reason:'stop'}]},{choices:[{message:{content:'SAFE FINAL'},finish_reason:'stop'}]}];
-assert.equal(await run("generateDirectorResponse('PRIVATE PROMPT',3456)"),'SAFE FINAL');
+await assert.rejects(run("generateDirectorResponse('PRIVATE PROMPT',3456)"),e=>e.directorCode==='empty');assert.equal(calls.length,1);assert.equal(await run("generateDirectorResponse('PRIVATE PROMPT',3456)"),'SAFE FINAL');
 assert.deepEqual(calls.map(v=>v[2]),[3456,3456]);
-assert.equal(calls[0][3].extractData,false);assert.equal(calls[0].length,4);
+assert.equal(calls[0][3].extractData,false);assert.equal(calls[0].length,5);assert.equal(calls[0][0],'EULE-OWN');
 responses=[{choices:[{message:{content:'TRUNCATED SECRET'},finish_reason:'length'}],usage:{prompt_tokens:151036,completion_tokens:1000}}];
 await assert.rejects(run("generateDirectorResponse('PRIVATE',1600)"),e=>e.directorCode==='length'&&e.message.includes('151036')&&e.message.includes('1000')&&e.message.includes('1600'));
 assert.equal(responses.length,0);
@@ -24,7 +25,7 @@ for(const value of ['plain',{content:'extracted'},{response:'native'},{data:{cho
 responses=[{reasoning:'SECRET THINKING'},{reasoning:'SECRET THINKING'}];
 await assert.rejects(run("generateDirectorResponse('PRIVATE',500)"),e=>e.directorCode==='empty');
 responses=[new Error('SECRET KEY provider dump')];
-await assert.rejects(run("generateDirectorResponse('PRIVATE',500)"),e=>e.directorCode==='request'&&!e.message.includes('SECRET'));
+await assert.rejects(run("generateDirectorResponse('PRIVATE',500)"),e=>e.directorCode==='EULE_PROVIDER_FAILED'&&!e.message.includes('SECRET'));
 sandbox.input='# Titel\nEine Nachricht trifft ein. Sie enthüllt einen bestehenden Konflikt.\n\n## Begründung\nSECRET META';
 assert.equal(run('parseDirectorSuggestion(input)'),'Eine Nachricht trifft ein. Sie enthüllt einen bestehenden Konflikt.');
 for(const input of ['Nur ein Satz.','Eine Idee. Möchtest du mehr?','- Idee eins.\n- Idee zwei.','<think>unfinished','Eine Idee. Dieser Twist passt zur Geschichte.']){sandbox.input=input;assert.throws(()=>run('parseDirectorSuggestion(input)'));}

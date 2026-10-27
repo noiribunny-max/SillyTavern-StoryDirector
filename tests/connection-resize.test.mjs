@@ -1,21 +1,9 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
+import { vmSource } from './vm-support.mjs';
 import assert from 'node:assert/strict';
-const source = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8').replace('export async function init()', 'async function init()');
-test('dedicated profile routes requests without changing chat selection; missing profile fails closed', async () => {
-    const saved = new Map([['story-director-profile', 'owl']]), calls = [];
-    const context = { extensionSettings: { connectionManager: { selectedProfile: 'chat', profiles: [{ id: 'owl' }] } }, ConnectionManagerRequestService: { sendRequest: async (...args) => { calls.push(args); return { content: 'Ready' }; } } };
-    const sandbox = { console, window: {}, localStorage: { getItem: key => saved.get(key) }, SillyTavern: { getContext: () => context } };
-    vm.createContext(sandbox); vm.runInContext(source, sandbox);
-    await vm.runInContext("generateDirectorResponse('Test', 100)", sandbox);
-    assert.equal(calls[0][0], 'owl'); assert.equal(context.extensionSettings.connectionManager.selectedProfile, 'chat');
-    context.extensionSettings.connectionManager.profiles = [];
-    await assert.rejects(vm.runInContext("generateDirectorResponse('Test', 100)", sandbox), /Verbindungsprofil fehlt/);
-    assert.equal(calls.length, 1);
-    saved.clear(); await vm.runInContext("generateDirectorResponse('Test', 100)", sandbox);
-    assert.equal(calls[1][0], 'chat');
-});
+const source = vmSource(fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8'));
 class Target {
     events = {}; style = {}; children = [];
     addEventListener(type, fn) { this.events[type] = fn; }
