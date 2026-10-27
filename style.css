@@ -591,3 +591,11 @@
     border: 1px solid var(--SmartThemeBorderColor, #555);
     border-radius: 7px;
 }
+
+/* Keep resize edges accessible while the contents scroll, with mouse or touch. */
+.story-director-panel { max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 0; overflow: hidden; }
+.story-director-scroll { height: 100%; max-height: inherit; overflow-y: auto; padding: 14px; box-sizing: border-box; }
+.story-director-resize { position: absolute; z-index: 2; touch-action: none; }
+.story-director-resize-e { right: 0; top: 12px; bottom: 22px; width: 10px; cursor: ew-resize; }
+.story-director-resize-s { left: 12px; right: 22px; bottom: 0; height: 10px; cursor: ns-resize; }
+.story-director-resize-se { right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize; border-right: 3px solid currentColor; border-bottom: 3px solid currentColor; border-radius: 0 0 8px 0; }

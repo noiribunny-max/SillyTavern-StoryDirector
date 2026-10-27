@@ -42,7 +42,7 @@ function getStoryDirectorGenerationTokens(kind) {
     }
     const context = SillyTavern.getContext();
     const service = context.ConnectionManagerRequestService;
-    const profileId = context.extensionSettings?.connectionManager?.selectedProfile;
+    const profileId = getDirectorProfileId(context);
     let api = context.mainApi, preset;
     try {
         const profile = service?.getProfile?.(profileId);
@@ -80,7 +80,7 @@ function directorDiagnostic(result, maxTokens) {
 async function generateDirectorResponse(prompt, maxTokens, retryOnEmpty = true) {
     const context = SillyTavern.getContext();
     const service = context.ConnectionManagerRequestService;
-    const profileId = context.extensionSettings?.connectionManager?.selectedProfile;
+    const profileId = getDirectorProfileId(context);
     if (!profileId || !service?.sendRequest) {
         throw directorError('connection', 'Kein verfügbares Connection Profile. Bitte die SillyTavern-Verbindung prüfen.');
     }
@@ -889,6 +889,9 @@ function createStoryDirectorPanel() {
             </div>
 
          <div class="story-director-settings-content">
+    <label for="story-director-profile">🦉 Eules API-Verbindung</label>
+    <select id="story-director-profile" class="story-director-select"></select>
+    <p>Für eine eigene API: Anbieter, Schlüssel und Modell in SillyTaverns API-Einstellungen einrichten und als Verbindungsprofil speichern. Danach hier auswählen und die Chat-Verbindung zurückstellen. Eule verwendet das gewählte Profil unabhängig vom Chat. Schlüssel bleiben in SillyTavern.</p>
 
     <label
         class="story-director-setting-label"
@@ -1010,6 +1013,7 @@ function createStoryDirectorPanel() {
 </div>
     `;
 
+    panel.innerHTML = '<div class="story-director-scroll">' + panel.innerHTML + '</div>';
     document.body.appendChild(toggle);
     document.body.appendChild(panel);
 
@@ -1020,6 +1024,7 @@ function createStoryDirectorPanel() {
     setupDragging(toggle, panel);
     setupSettingsBackButton(panel);
     setupSuggestionSettings(panel);
+    setupDirectorConnection(panel);
 
     
 
@@ -1031,6 +1036,85 @@ function createStoryDirectorPanel() {
     });
 
     console.log('[Story Director] UI created!');
+}
+
+
+function getDirectorProfileId(context) {
+    let id;
+    try { id = localStorage.getItem('story-director-profile'); } catch {}
+    if (id && !context.extensionSettings?.connectionManager?.profiles?.some(profile => profile.id === id)) {
+        throw directorError('connection', 'Eules Verbindungsprofil fehlt. Bitte in Eules Einstellungen neu auswählen.');
+    }
+    return id || context.extensionSettings?.connectionManager?.selectedProfile;
+}
+
+function setupDirectorConnection(panel) {
+    const select = panel.querySelector('#story-director-profile');
+    const refresh = () => {
+        const profiles = SillyTavern.getContext().extensionSettings?.connectionManager?.profiles ?? [];
+        let saved = '';
+        try { saved = localStorage.getItem('story-director-profile') || ''; } catch {}
+        select.replaceChildren(new Option('Aktuelle Chat-Verbindung verwenden', ''));
+        for (const profile of profiles) select.add(new Option(profile.name || profile.id, profile.id));
+        if (saved && !profiles.some(profile => profile.id === saved)) select.add(new Option('Gespeichertes Profil fehlt – bitte neu wählen', saved));
+        select.value = saved;
+    };
+    refresh();
+    select.addEventListener('focus', refresh);
+    select.addEventListener('change', () => {
+        try { localStorage.setItem('story-director-profile', select.value); }
+        catch { alert('Eules Verbindungsprofil konnte nicht gespeichert werden.'); }
+    });
+}
+
+function setupDirectorResize(panel) {
+    const key = 'story-director-panel-size';
+    const fit = (width, height) => {
+        const vw = window.innerWidth, vh = window.innerHeight;
+        width = Math.min(Math.max(240, width), vw - 16);
+        height = Math.min(Math.max(180, height), vh - 16);
+        panel.style.width = width + 'px';
+        panel.style.height = height + 'px';
+        if (panel.classList.contains('story-director-collapsed')) return;
+        const rect = panel.getBoundingClientRect();
+        const pos = boundedHudPosition(rect.left, rect.top, width, height);
+        panel.style.left = pos.left + 'px'; panel.style.top = pos.top + 'px'; panel.style.right = 'auto';
+    };
+    try {
+        const size = JSON.parse(localStorage.getItem(key));
+        if (Number.isFinite(size?.width) && Number.isFinite(size?.height)) fit(size.width, size.height);
+    } catch {}
+    let active;
+    const handles = [];
+    for (const edge of ['e', 's', 'se']) {
+        const handle = document.createElement('div');
+        handle.className = 'story-director-resize story-director-resize-' + edge;
+        handle.title = 'Ziehen, um Eules Größe anzupassen';
+        panel.appendChild(handle); handles.push(handle);
+        handle.addEventListener('pointerdown', event => {
+            if (active || event.isPrimary === false || (event.button !== undefined && event.button !== 0)) return;
+            event.preventDefault(); event.stopPropagation();
+            const rect = panel.getBoundingClientRect();
+            active = { id: event.pointerId, x: event.clientX, y: event.clientY, width: rect.width, height: rect.height, edge };
+            handle.setPointerCapture(event.pointerId);
+        });
+        handle.addEventListener('pointermove', event => {
+            if (active?.id !== event.pointerId) return;
+            event.preventDefault();
+            fit(active.width + (active.edge.includes('e') ? event.clientX - active.x : 0), active.height + (active.edge.includes('s') ? event.clientY - active.y : 0));
+        });
+        const finish = event => {
+            if (active?.id !== event.pointerId) return;
+            active = null;
+            const rect = panel.getBoundingClientRect();
+            try { localStorage.setItem(key, JSON.stringify({ width: rect.width, height: rect.height })); } catch {}
+            if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+        };
+        for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(type, finish);
+    }
+    const onResize = () => { if (!panel.classList.contains('story-director-collapsed')) { const rect = panel.getBoundingClientRect(); fit(rect.width, rect.height); } };
+    window.addEventListener('resize', onResize);
+    return () => { active = null; window.removeEventListener('resize', onResize); handles.forEach(handle => handle.remove()); };
 }
 
 function setupToggle(toggle, panel) {
@@ -1057,7 +1141,7 @@ function setupCloseButton(toggle, panel) {
 }
 
 function setupDragging(toggle, panel) {
-    const cleanups = [setupDraggable(toggle), setupDraggable(panel, panel.querySelector('.story-director-header'))];
+    const cleanups = [setupDraggable(toggle), setupDraggable(panel, panel.querySelector('.story-director-header')), setupDirectorResize(panel)];
     const observer = new MutationObserver(() => {
         if (!toggle.isConnected || !panel.isConnected) cleanup();
     });

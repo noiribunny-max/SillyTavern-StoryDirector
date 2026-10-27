@@ -155,6 +155,7 @@ test('removing the HUD disconnects its observer and all drag listeners', () => {
         observe() { this.observing = true; }
         disconnect() { this.observing = false; }
     };
+    vm.runInContext('setupDirectorResize = () => () => {}', f.sandbox);
     const cleanup = vm.runInContext('setupDragging(element, panel)', f.sandbox);
     f.element.emit('pointerdown'); f.win.emit('pointermove', { clientX: 200 });
     f.element.isConnected = false; observer.callback();
