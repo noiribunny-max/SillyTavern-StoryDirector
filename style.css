@@ -650,4 +650,6 @@
 .story-director-resize { position: absolute; z-index: 2; touch-action: none; }
 .story-director-resize-e { right: 0; top: 12px; bottom: 22px; width: 10px; cursor: ew-resize; }
 .story-director-resize-s { left: 12px; right: 22px; bottom: 0; height: 10px; cursor: ns-resize; }
-.story-director-resize-se { right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize; border-right: 3px solid currentColor; border-bottom: 3px solid currentColor; border-radius: 0 0 8px 0; }
+.story-director-resize-se { right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize; border-right: 3px solid currentColor; border-bottom: 3px solid currentColor; border-radius: 0 0 8px 0; }/* Direct key entry needs a readable action beside the password field. */
+.eule-api-control .eule-api-key-save { width: auto; min-width: 100px; flex: 0 0 auto; white-space: nowrap; padding: 6px 10px; }
+@media (max-width: 600px) { .eule-api-control:has(.eule-api-key-save) { flex-wrap: wrap; } .eule-api-control:has(.eule-api-key-save) input { flex-basis: 100%; } }

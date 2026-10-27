@@ -1,4 +1,5 @@
 import {createConnectionFields} from './connection-fields.mjs';
+import {saveDirectorSecret} from './connection-secret.mjs';
 import { createIdeaStore, occurrenceStatus } from './ideas.mjs';
 import { compareIdeas } from './similarity.mjs';
 import { CONNECTION_KEY, connectionSettings, validateConnection, requestEuleModel } from './connection.mjs';
@@ -80,19 +81,21 @@ export function createWorkbench({getContext,document,fetcher,onOpenHistory=()=>{
   }
   refreshProfiles();select.addEventListener('focus',refreshProfiles);
   const guide=document.createElement('p');guide.className='eule-api-hint';guide.hidden=true;guide.setAttribute('role','status');
-  guide.textContent='So richtest du Eules Schlüssel ein: In SillyTaverns API-Einstellungen Chat Completion → Custom (OpenAI-kompatibel) wählen. Dort Base URL, API-Schlüssel und Modell eintragen und verbinden. Diese Verbindung als eigenes Profil (z. B. Eule) speichern, dann deine normale Chat-Verbindung wieder auswählen. Zurück bei Eule dieses Profil auswählen, eigene Verbindung aktivieren und speichern. Das Schlüsselfeld hier ist nur eine Statusanzeige.';
+  guide.textContent='Ein OpenAI-kompatibles Verbindungsprofil auswählen, Base URL und Modell festlegen. Den API-Key direkt im Feld darüber einfügen und „Key speichern“ drücken. Anschließend eigene Verbindung aktivieren und „Eule-Verbindung speichern“ drücken. Das Zahnrad öffnet zusätzlich SillyTaverns allgemeine Schlüsselverwaltung.';
   const manageProfile=()=>{guide.hidden=false;document.getElementById('API-status-top')?.click();notice('Die API-Einstellungen wurden geöffnet. Die Anleitung zur Einrichtung steht bei Eules Verbindung.');};
-  const {model,url}=createConnectionFields({document,parent:box,settings:s,profileSelect:select,getService:()=>getContext().ConnectionManagerRequestService,onManage:manageProfile});
+  const {model,url}=createConnectionFields({document,parent:box,settings:s,profileSelect:select,getService:()=>getContext().ConnectionManagerRequestService,onManage:manageProfile,
+   getSecretId:id=>getContext().extensionSettings?.[CONNECTION_KEY]?.secretIds?.[id]||'',
+   onSaveKey:async(id,value)=>{await saveDirectorSecret(getContext(),id,value);notice('API-Key für Eule gespeichert. Keine Modellanfrage gestartet.');}});
   box.appendChild(guide);
   const temperature=input('Temperatur 0 bis 2','number',s.temperature),budget=input('Maximale Eingabezeichen (Schätzung, keine Tokenzahl)','number',s.maxInputCharacters),timeout=input('Zeitlimit in Millisekunden','number',s.timeoutMs);
   temperature.step='.1';temperature.min='0';temperature.max='2';
-  const info=document.createElement('p');info.textContent='NanoGPT-Basis: https://nano-gpt.com/api/v1. Schlüssel nur im SillyTavern-Secret-Store des eigenen Profils verwalten. Hier werden keine Schlüssel gelesen oder gespeichert. Ausgabegrenzen stehen weiterhin unten je Aufgabe.';box.appendChild(info);
+  const info=document.createElement('p');info.textContent='Der hier eingegebene Key wird in SillyTaverns Schlüsselspeicher abgelegt. Eule speichert nur seine Kennung für das gewählte Profil. Bereits gespeicherte Schlüssel werden nicht ausgelesen. Ausgabegrenzen stehen weiterhin unten je Aufgabe.';box.appendChild(info);
   button(box,'API-Schlüssel einrichten / Anleitung',async()=>{manageProfile();});
   button(box,'Eule-Verbindung speichern',async()=>{
    const value={schema:1,enabled:enabled.checked,profileId:select.value,model:model.value.trim(),url:url.value.trim(),temperature:Number(temperature.value),maxInputCharacters:Number(budget.value),timeoutMs:Number(timeout.value)};
-   if(value.enabled)validateConnection(getContext(),value);
+   if(value.enabled)validateConnection(getContext(),{...value,secretId:getContext().extensionSettings?.[CONNECTION_KEY]?.secretIds?.[value.profileId]||''});
    const c=getContext();if(typeof c.saveSettingsDebounced!=='function')throw Error('EULE_SETTINGS_SAVE_UNAVAILABLE');
-   c.extensionSettings[CONNECTION_KEY]=value;c.saveSettingsDebounced();notice('Nur Eules Verbindung gespeichert. Keine Modellanfrage und keine Umschaltung des Hauptprofils.');
+   c.extensionSettings[CONNECTION_KEY]={...c.extensionSettings[CONNECTION_KEY],...value};c.saveSettingsDebounced();notice('Nur Eules Verbindung gespeichert. Keine Modellanfrage und keine Umschaltung des Hauptprofils.');
   });
   const testConsent=input('Einmaliger Verbindungstest: eine kostenpflichtige Anfrage, höchstens 16 Ausgabetokens; kein Chat-/Lorekontext','checkbox',false);
   button(box,'Gespeicherte Eule-Verbindung einmal testen',async()=>{
