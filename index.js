@@ -42,7 +42,7 @@ function getStoryDirectorGenerationTokens(kind) {
     }
     const context = SillyTavern.getContext();
     const service = context.ConnectionManagerRequestService;
-    const profileId = context.extensionSettings?.connectionManager?.selectedProfile;
+    const profileId = getDirectorProfileId(context);
     let api = context.mainApi, preset;
     try {
         const profile = service?.getProfile?.(profileId);
@@ -80,7 +80,7 @@ function directorDiagnostic(result, maxTokens) {
 async function generateDirectorResponse(prompt, maxTokens, retryOnEmpty = true) {
     const context = SillyTavern.getContext();
     const service = context.ConnectionManagerRequestService;
-    const profileId = context.extensionSettings?.connectionManager?.selectedProfile;
+    const profileId = getDirectorProfileId(context);
     if (!profileId || !service?.sendRequest) {
         throw directorError('connection', 'Kein verfügbares Connection Profile. Bitte die SillyTavern-Verbindung prüfen.');
     }
@@ -564,7 +564,7 @@ Das beschriebene Ereignis bzw. der beschriebene Zeitsprung muss JETZT in der nä
 - Behandle diese Anweisung nicht als Spielertext.
 - Erwähne diese OOC-Anweisung, den Story Director oder die Vorgabe niemals in der RPG-Antwort.
 - Lass NPCs weiterhin selbstständig und charaktergetreu handeln.
-- Erfinde keine Handlungen, Gedanken oder Entscheidungen für den Spielercharakter.
+- Erfinde keine Handlungen, Gedanken, Gefühle, Äußerungen oder Entscheidungen für den Spielercharakter.
 - Setze die Vorgabe als Teil der normalen RPG-Erzählung um.
 - Verschiebe die Umsetzung nicht auf eine spätere Antwort.
 - Eine bloße Andeutung oder ein Hinweis darauf, dass das Ereignis passieren könnte, reicht nicht aus.
@@ -574,7 +574,24 @@ ${suggestion}
 === ENDE DER REGIEVORGABE ===
 </OOC>`;
 
-    await context.setExtensionPrompt(
+    if (typeof context.generate !== 'function') throw new Error('[Story Director] RPG-Generierung nicht verfügbar.');
+    const inventoryDirection = globalThis.RPGStateTracker?.sceneDirection;
+    const ticket = inventoryDirection?.confirmEule({ text: injection, confirmed: true });
+    const capturedChatId = context.chatId ?? context.getCurrentChatId?.() ?? null;
+    const capturedMetadata = context.chatMetadata;
+    const handoffId = 'eule:' + (globalThis.crypto?.randomUUID?.() ?? String(Date.now()) + ':' + Math.random());
+    const capturedHistory = JSON.stringify((context.chat ?? []).map(m => [m.mes, m.swipe_id]));
+    const fallback = !ticket && capturedChatId ? Object.freeze({ acquire: () => {
+        const valid = () => {
+            const now = SillyTavern.getContext();
+            return globalThis.EuleSceneDirection === fallback && storyDirectorState.activeInstruction === injection
+                && (now.chatId ?? now.getCurrentChatId?.()) === capturedChatId && now.chatMetadata === capturedMetadata
+                && JSON.stringify((now.chat ?? []).map(m => [m.mes, m.swipe_id])) === capturedHistory;
+        };
+        return valid() ? Object.freeze({ key: handoffId, text: injection, isCurrent: valid }) : null;
+    } }) : null;
+    if (fallback) globalThis.EuleSceneDirection = fallback;
+    if (!ticket) await context.setExtensionPrompt(
         STORY_DIRECTOR_INJECTION_ID,
         injection,
         0,
@@ -597,14 +614,18 @@ ${suggestion}
         );
     }
 
+    let succeeded = false;
     try {
         // Die Vorgabe steckt bereits in setExtensionPrompt().
         // Deshalb wird hier die normale SillyTavern-RPG-Generierung
         // ohne zusätzlichen User-Prompt ausgelöst.
         const generated = await context.generate();
         if (generated === false) throw new Error('[Story Director] RPG-Generierung wurde abgebrochen.');
+        succeeded = true;
     } finally {
-        // Die Director-Vorgabe gilt ausschließlich für diese eine Antwort.
+        ticket?.finish({ success: succeeded });
+        if (fallback && globalThis.EuleSceneDirection === fallback) delete globalThis.EuleSceneDirection;
+        // Ein Eigentümer pro Prompt: Inventar oder Eules eigenständiger Rückfall.
         await clearStoryDirectorInjection();
     }
 }
@@ -868,6 +889,9 @@ function createStoryDirectorPanel() {
             </div>
 
          <div class="story-director-settings-content">
+    <label for="story-director-profile">🦉 Eules API-Verbindung</label>
+    <select id="story-director-profile" class="story-director-select"></select>
+    <p>Für eine eigene API: Anbieter, Schlüssel und Modell in SillyTaverns API-Einstellungen einrichten und als Verbindungsprofil speichern. Danach hier auswählen und die Chat-Verbindung zurückstellen. Eule verwendet das gewählte Profil unabhängig vom Chat. Schlüssel bleiben in SillyTavern.</p>
 
     <label
         class="story-director-setting-label"
@@ -989,6 +1013,7 @@ function createStoryDirectorPanel() {
 </div>
     `;
 
+    panel.innerHTML = '<div class="story-director-scroll">' + panel.innerHTML + '</div>';
     document.body.appendChild(toggle);
     document.body.appendChild(panel);
 
@@ -999,6 +1024,7 @@ function createStoryDirectorPanel() {
     setupDragging(toggle, panel);
     setupSettingsBackButton(panel);
     setupSuggestionSettings(panel);
+    setupDirectorConnection(panel);
 
     
 
@@ -1010,6 +1036,85 @@ function createStoryDirectorPanel() {
     });
 
     console.log('[Story Director] UI created!');
+}
+
+
+function getDirectorProfileId(context) {
+    let id;
+    try { id = localStorage.getItem('story-director-profile'); } catch {}
+    if (id && !context.extensionSettings?.connectionManager?.profiles?.some(profile => profile.id === id)) {
+        throw directorError('connection', 'Eules Verbindungsprofil fehlt. Bitte in Eules Einstellungen neu auswählen.');
+    }
+    return id || context.extensionSettings?.connectionManager?.selectedProfile;
+}
+
+function setupDirectorConnection(panel) {
+    const select = panel.querySelector('#story-director-profile');
+    const refresh = () => {
+        const profiles = SillyTavern.getContext().extensionSettings?.connectionManager?.profiles ?? [];
+        let saved = '';
+        try { saved = localStorage.getItem('story-director-profile') || ''; } catch {}
+        select.replaceChildren(new Option('Aktuelle Chat-Verbindung verwenden', ''));
+        for (const profile of profiles) select.add(new Option(profile.name || profile.id, profile.id));
+        if (saved && !profiles.some(profile => profile.id === saved)) select.add(new Option('Gespeichertes Profil fehlt – bitte neu wählen', saved));
+        select.value = saved;
+    };
+    refresh();
+    select.addEventListener('focus', refresh);
+    select.addEventListener('change', () => {
+        try { localStorage.setItem('story-director-profile', select.value); }
+        catch { alert('Eules Verbindungsprofil konnte nicht gespeichert werden.'); }
+    });
+}
+
+function setupDirectorResize(panel) {
+    const key = 'story-director-panel-size';
+    const fit = (width, height) => {
+        const vw = window.innerWidth, vh = window.innerHeight;
+        width = Math.min(Math.max(240, width), vw - 16);
+        height = Math.min(Math.max(180, height), vh - 16);
+        panel.style.width = width + 'px';
+        panel.style.height = height + 'px';
+        if (panel.classList.contains('story-director-collapsed')) return;
+        const rect = panel.getBoundingClientRect();
+        const pos = boundedHudPosition(rect.left, rect.top, width, height);
+        panel.style.left = pos.left + 'px'; panel.style.top = pos.top + 'px'; panel.style.right = 'auto';
+    };
+    try {
+        const size = JSON.parse(localStorage.getItem(key));
+        if (Number.isFinite(size?.width) && Number.isFinite(size?.height)) fit(size.width, size.height);
+    } catch {}
+    let active;
+    const handles = [];
+    for (const edge of ['e', 's', 'se']) {
+        const handle = document.createElement('div');
+        handle.className = 'story-director-resize story-director-resize-' + edge;
+        handle.title = 'Ziehen, um Eules Größe anzupassen';
+        panel.appendChild(handle); handles.push(handle);
+        handle.addEventListener('pointerdown', event => {
+            if (active || event.isPrimary === false || (event.button !== undefined && event.button !== 0)) return;
+            event.preventDefault(); event.stopPropagation();
+            const rect = panel.getBoundingClientRect();
+            active = { id: event.pointerId, x: event.clientX, y: event.clientY, width: rect.width, height: rect.height, edge };
+            handle.setPointerCapture(event.pointerId);
+        });
+        handle.addEventListener('pointermove', event => {
+            if (active?.id !== event.pointerId) return;
+            event.preventDefault();
+            fit(active.width + (active.edge.includes('e') ? event.clientX - active.x : 0), active.height + (active.edge.includes('s') ? event.clientY - active.y : 0));
+        });
+        const finish = event => {
+            if (active?.id !== event.pointerId) return;
+            active = null;
+            const rect = panel.getBoundingClientRect();
+            try { localStorage.setItem(key, JSON.stringify({ width: rect.width, height: rect.height })); } catch {}
+            if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+        };
+        for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(type, finish);
+    }
+    const onResize = () => { if (!panel.classList.contains('story-director-collapsed')) { const rect = panel.getBoundingClientRect(); fit(rect.width, rect.height); } };
+    window.addEventListener('resize', onResize);
+    return () => { active = null; window.removeEventListener('resize', onResize); handles.forEach(handle => handle.remove()); };
 }
 
 function setupToggle(toggle, panel) {
@@ -1036,7 +1141,7 @@ function setupCloseButton(toggle, panel) {
 }
 
 function setupDragging(toggle, panel) {
-    const cleanups = [setupDraggable(toggle), setupDraggable(panel, panel.querySelector('.story-director-header'))];
+    const cleanups = [setupDraggable(toggle), setupDraggable(panel, panel.querySelector('.story-director-header')), setupDirectorResize(panel)];
     const observer = new MutationObserver(() => {
         if (!toggle.isConnected || !panel.isConnected) cleanup();
     });
@@ -1061,8 +1166,7 @@ function setupDraggable(element, handle = element) {
         frame = null;
         if (!active || !pending) return;
         // Measure once per gesture; moves only write the latest coordinates.
-        const left = Math.max(0, Math.min(active.left + pending.x - active.x, Math.max(0, window.innerWidth - active.width)));
-        const top = Math.max(0, Math.min(active.top + pending.y - active.y, Math.max(0, window.innerHeight - active.height)));
+        const { left, top } = boundedHudPosition(active.left + pending.x - active.x, active.top + pending.y - active.y, active.width, active.height);
         element.style.left = `${left}px`;
         element.style.top = `${top}px`;
         pending = null;
@@ -1089,7 +1193,6 @@ function setupDraggable(element, handle = element) {
             if (handle.hasPointerCapture?.(previous.id)) handle.releasePointerCapture(previous.id);
         } catch { /* Capture can already be gone after cancellation or removal. */ }
         if (commit && previous.moved) {
-            snapToEdge(element);
             try { saveHudPosition(element); }
             catch { console.warn('[Story Director] Could not save HUD position.'); }
         }
@@ -1099,9 +1202,12 @@ function setupDraggable(element, handle = element) {
         const control = event.target.closest?.('button, input, textarea, select, a, [contenteditable="true"]');
         if (control && control !== element) return;
         const rect = element.getBoundingClientRect();
-        active = { id: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top, width: rect.width, height: rect.height, moved: false };
-        element.style.left = `${rect.left}px`;
-        element.style.top = `${rect.top}px`;
+        // Offset coordinates ignore the toggle's transient hover/pressed scale.
+        const left = Number.isFinite(element.offsetLeft) ? element.offsetLeft : rect.left;
+        const top = Number.isFinite(element.offsetTop) ? element.offsetTop : rect.top;
+        active = { id: event.pointerId, x: event.clientX, y: event.clientY, left, top, width: element.offsetWidth || rect.width, height: element.offsetHeight || rect.height, moved: false };
+        element.style.left = `${left}px`;
+        element.style.top = `${top}px`;
         element.style.right = 'auto';
         if (isToggle) element.dataset.wasDragged = 'false';
         try { handle.setPointerCapture?.(event.pointerId); }
@@ -1123,39 +1229,21 @@ function setupDraggable(element, handle = element) {
     return () => { finish(); cleanups.splice(0).forEach(dispose => dispose()); };
 }
 
-function snapToEdge(element) {
-    const rect = element.getBoundingClientRect();
-
-    const distanceLeft = rect.left;
-    const distanceRight = window.innerWidth - rect.right;
-
-    const margin = window.innerWidth <= 600 ? 8 : 12;
-
-    if (distanceLeft < distanceRight) {
-        element.style.left = `${margin}px`;
-    } else {
-        element.style.left = `${window.innerWidth - rect.width - margin}px`;
-    }
-
-    const updatedRect = element.getBoundingClientRect();
-
-    let top = updatedRect.top;
-
-    top = Math.max(
-        margin,
-        Math.min(top, window.innerHeight - updatedRect.height - margin)
-    );
-
-    element.style.top = `${top}px`;
+function boundedHudPosition(left, top, width, height) {
+    const viewport = window.visualViewport;
+    const minLeft = viewport?.offsetLeft ?? 0, minTop = viewport?.offsetTop ?? 0;
+    const maxLeft = minLeft + Math.max(0, (viewport?.width ?? window.innerWidth) - width);
+    const maxTop = minTop + Math.max(0, (viewport?.height ?? window.innerHeight) - height);
+    return { left: Math.max(minLeft, Math.min(left, maxLeft)), top: Math.max(minTop, Math.min(top, maxTop)) };
 }
 
 function saveHudPosition(element) {
-    const rect = element.getBoundingClientRect();
-
+    // Store the actual CSS position, not a scaled hover/pressed bounding box.
     const position = {
-        left: rect.left,
-        top: rect.top
+        left: parseFloat(element.style.left),
+        top: parseFloat(element.style.top)
     };
+    if (!Number.isFinite(position.left) || !Number.isFinite(position.top)) return;
 
     localStorage.setItem(
         HUD_POSITION_KEY,
@@ -1164,26 +1252,23 @@ function saveHudPosition(element) {
 }
 
 function restoreHudPosition(toggle, panel) {
-    const saved = localStorage.getItem(HUD_POSITION_KEY);
-
-    if (!saved) {
-        return;
-    }
-
     try {
+        const saved = localStorage.getItem(HUD_POSITION_KEY);
+        if (!saved) return;
         const position = JSON.parse(saved);
 
         if (
-            typeof position.left !== 'number' ||
-            typeof position.top !== 'number'
+            !Number.isFinite(position.left) ||
+            !Number.isFinite(position.top)
         ) {
             return;
         }
 
         const element = toggle;
-
-        element.style.left = `${position.left}px`;
-        element.style.top = `${position.top}px`;
+        const rect = element.getBoundingClientRect();
+        const bounded = boundedHudPosition(position.left, position.top, element.offsetWidth || rect.width, element.offsetHeight || rect.height);
+        element.style.left = `${bounded.left}px`;
+        element.style.top = `${bounded.top}px`;
         element.style.right = 'auto';
     } catch (error) {
         console.warn(
@@ -1932,10 +2017,10 @@ FORMAT:
             result.innerHTML = '';
 
             const acceptInstruction = `
-Der Time Skip wurde bereits vollständig berücksichtigt.
+Dieser bestätigte Time Skip ist eine erzählerische Vorgabe. Eine gespeicherte Inventar-Zeitänderung ist damit NICHT bestätigt.
 
 Der Zeitsprung von ${startText} bis ${endText} (${durationText}) ist
-JETZT kanonisch passiert. Die untenstehende Zusammenfassung beschreibt
+für die Erzählung bestätigt. Er darf ohne belegte Inventar-Übernahme nicht als gespeicherter RPG-Zeitstand ausgegeben werden. Die untenstehende Zusammenfassung beschreibt
 die relevanten Entwicklungen während dieses Zeitraums.
 
 Setze die RPG-Geschichte unmittelbar AM ENDE dieses Zeitsprungs fort.

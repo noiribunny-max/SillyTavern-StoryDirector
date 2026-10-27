@@ -5,7 +5,7 @@ const calls=[], logs=[];
 let responses=[];
 const settings={tokens:{event:3456},customTokens:true,slots:[{slot:1,task:'conflict'},{slot:2,task:'negative'}],slotCount:2};
 const context={extensionSettings:{connectionManager:{selectedProfile:'main'}},ConnectionManagerRequestService:{sendRequest:async(...args)=>{calls.push(args);const value=responses.shift();if(value instanceof Error)throw value;return value;}}};
-const sandbox={window:{},console:{log:(...v)=>logs.push(v),info:(...v)=>logs.push(v),warn:(...v)=>logs.push(v),error:(...v)=>logs.push(v)},document:{getElementById:()=>null},localStorage:{getItem:()=>JSON.stringify(settings)},SillyTavern:{getContext:()=>context}};
+const sandbox={window:{},console:{log:(...v)=>logs.push(v),info:(...v)=>logs.push(v),warn:(...v)=>logs.push(v),error:(...v)=>logs.push(v)},document:{getElementById:()=>null},localStorage:{getItem:key=>key === 'story-director-profile' ? null : JSON.stringify(settings)},SillyTavern:{getContext:()=>context}};
 vm.createContext(sandbox);
 const source=fs.readFileSync(new URL('../index.js',import.meta.url),'utf8');
 vm.runInContext(source.replace('export async function init()','async function init()'),sandbox);
